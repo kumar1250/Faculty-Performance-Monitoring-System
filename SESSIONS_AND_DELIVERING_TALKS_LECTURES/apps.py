@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class ChairingConfig(AppConfig):
-    name = 'CHAIRING'
+class SessionsAndDeliveringTalksLecturesConfig(AppConfig):
+    name = 'SESSIONS_AND_DELIVERING_TALKS_LECTURES'
