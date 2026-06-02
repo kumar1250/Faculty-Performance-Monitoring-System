@@ -1,5 +1,5 @@
 
-# Create your views here.
+# It was developed By Kumar
 from urllib import request
 
 from rest_framework.viewsets import ViewSet
