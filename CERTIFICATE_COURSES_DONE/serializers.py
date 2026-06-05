@@ -19,6 +19,7 @@ class CourseSerializer(serializers.ModelSerializer):
         fields = '__all__'
         
 
+
 class CreateCourseSerializer(serializers.ModelSerializer):
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif','webp']

@@ -6,9 +6,7 @@ from .models import Course
 from accounts.token_jwt import decode_token,get_token_from_request
 from accounts.permissions import IsAuthenticated,IsHOD,IsPrincipal,IsDean,IsFaculty,IsCommittee_Coordinator,IsDepartment_Incharge
 from .serializers import CourseSerializer,CreateCourseSerializer
-
 from accounts.models import User
-
 import boto3
 from django.conf import settings
 
@@ -96,6 +94,7 @@ class CourseDone(ViewSet):
                                 status=status.HTTP_400_BAD_REQUEST
                                 )
     
+    
     @action(detail=True,url_path='approve',methods=['post'],)
     def approvecourse(self,request,pk=None):
         try:
@@ -153,6 +152,8 @@ class CourseDone(ViewSet):
         serializer = CourseSerializer(course)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+    
+    
     @action(detail=True,url_path='delete',methods=['delete'])
     def delete_course(self,request,pk=None):
         try:
@@ -177,6 +178,7 @@ class CourseDone(ViewSet):
         course.delete()
         return Response(
             {"message": "Deleted successfully"},status=status.HTTP_200_OK)
+
 
 
     @action(detail=True,url_path='file', methods=["get"])
