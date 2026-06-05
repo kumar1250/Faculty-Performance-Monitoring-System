@@ -3,18 +3,19 @@ from django.conf import settings
 from datetime import datetime, timedelta
 from .models import User
 
-def create_token(user):
+def create_token(user)->str:
     payload = {
         'user_id': user.id,
         'username': user.username,
         'role': user.role,
+        'register_no': user.register_no,
         'exp': datetime.utcnow() + timedelta(hours=1),
         'iat': datetime.utcnow()
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
     return token
 
-def decode_token(token):
+def decode_token(token:str)->dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
         user = User.objects.get(id=payload['user_id'])

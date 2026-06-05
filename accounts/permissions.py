@@ -38,7 +38,7 @@ class IsDean(BasePermission):
 class IsHOD(BasePermission):
     def has_permission(self, request, view):
         user = get_user_from_request(request)
-        return user and user['role'] == 'hod'
+        return user and user['role']=='hod'
 
 class IsCommittee_Coordinator(BasePermission):
     def has_permission(self, request, view):

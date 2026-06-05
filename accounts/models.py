@@ -3,7 +3,7 @@ from django.contrib.auth.hashers import make_password
 
 # Create your models here.
 
-class User (models.Model):
+class User(models.Model):
     ROLE_CHOICES = (
         ('principal', 'Principal'),
         ('dean', 'Dean'),
@@ -14,11 +14,11 @@ class User (models.Model):
     )
 
     username = models.CharField(max_length=100)
-    register_no = models.CharField(max_length=10, unique=True,blank=True)
-    email = models.EmailField(unique=True,blank=True)
+    register_no = models.CharField(max_length=10, unique=True)
+    email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
-    points=models.IntegerField(default=0,blank=True,null=True)
+    points=models.IntegerField(default=0,blank=True)
     
     def save(self, *args, **kwargs):
         # Hash the password before saving
