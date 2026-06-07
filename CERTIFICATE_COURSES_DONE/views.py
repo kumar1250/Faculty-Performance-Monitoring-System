@@ -83,7 +83,7 @@ class CourseDone(ViewSet):
         course_serializer=CreateCourseSerializer(course,data=request.data,partial=True)
         if course_serializer.is_valid():
             updated_data = course_serializer.save()
-            if old_file and old_file != updated_data.certificate_file:
+            if old_file and (old_file != updated_data.certificate_file or old_file == updated_data.certificate_file):
                 old_file.delete(save=False)
             course.points = 0
             course.approval_status = "pending"
