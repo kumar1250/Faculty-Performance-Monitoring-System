@@ -91,7 +91,7 @@ class UserViewSet(ViewSet):
     def update_user(self, request, pk=None):
         user = decode_token(get_token_from_request(request))
         
-        if user and user.role in ['principal', 'dean', 'hod']:
+        if user and user['role'] in ['principal', 'dean', 'hod']:
             try:
                 user_to_update = User.objects.get(id=pk)
                 user_to_update_role = user_to_update.role
