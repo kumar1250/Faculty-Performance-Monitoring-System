@@ -113,7 +113,7 @@ class UserViewSet(ViewSet):
                         user_to_update.points += role_points[new_role]
                         user_to_update.points -= role_points[user_to_update_role]
                         user_to_update.save()
-                    return Response(serializer.data, status=status.HTTP_200_OK)
+                    return Response({"username": user_to_update.username,"email": user_to_update.email,"register_no": user_to_update.register_no,"role": user_to_update.role}, status=status.HTTP_200_OK)
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
