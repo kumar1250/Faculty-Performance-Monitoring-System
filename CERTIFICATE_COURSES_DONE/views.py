@@ -82,11 +82,25 @@ class CourseDone(ViewSet):
         #     )
         course_serializer=CreateCourseSerializer(course,data=request.data,partial=True)
         if course_serializer.is_valid():
-            updated_data = course_serializer.save()
-            if old_file and old_file != updated_data.certificate_file:
-                old_file.delete(save=False)
-            if old_file and old_file == updated_data.certificate_file:
-                old_file.delete(save=False)
+            new_file = request.FILES.get("certificate_file")
+
+            if new_file:
+                allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+                extension = new_file.name.split('.')[-1].lower()
+
+                if extension not in allowed_extensions:
+                    return Response(
+                        {
+                            "certificate_file": [
+                                "Only image files (jpg, jpeg, png, gif, webp) are allowed."
+                            ]
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            course_serializer.save()
+            if old_file and new_file:
+                old_file.delete(save=False)    
             course.points = 0
             course.approval_status = "pending"
             course.save()
