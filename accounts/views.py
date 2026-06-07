@@ -75,7 +75,7 @@ class UserViewSet(ViewSet):
         serializer = UserRegistrationSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['delete'], url_path='delete/', permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['delete'], url_path='delete', permission_classes=[IsAuthenticated])
     def delete_user(self, request, pk=None):
         user = decode_token(get_token_from_request(request))
         if user and user['role'] in ['principal', 'dean', 'hod']:
