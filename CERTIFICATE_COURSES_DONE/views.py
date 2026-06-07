@@ -28,7 +28,6 @@ class CourseDone(ViewSet):
         if course_serializer.is_valid():
             user = decode_token(get_token_from_request(request))
             course_serializer.save(user=User.objects.get(register_no=user["register_no"]))
-            course_serializer.save()
             return Response(
                 course_serializer.data,
                 status=status.HTTP_201_CREATED
