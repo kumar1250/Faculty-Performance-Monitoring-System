@@ -56,7 +56,8 @@ class UserViewSet(ViewSet):
     def user_details(self, request):
         user = decode_token(get_token_from_request(request))
         if user:
-            serializer = UserSerializer(user)
+            data = User.objects.get(id=user['user_id'])
+            serializer = UserRegistrationSerializer(data)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     
