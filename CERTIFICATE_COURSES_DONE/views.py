@@ -259,9 +259,9 @@ class CourseDone(ViewSet):
         return Response(
             {"message": "Deleted successfully"},status=status.HTTP_200_OK)
 
-
-    @action(detail=True,url_path='file', methods=["get"])
+    @action(detail=True, url_path='file', methods=['get'])
     def certificate_url(self, request, pk=None):
+
         try:
             course = Course.objects.get(pk=pk)
         except Course.DoesNotExist:
@@ -269,31 +269,34 @@ class CourseDone(ViewSet):
                 {"error": "Course not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
         if not course.certificate_file:
             return Response(
                 {"error": "No certificate file uploaded"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
         s3 = boto3.client(
-        "s3",
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        region_name=settings.AWS_S3_REGION_NAME
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_S3_REGION_NAME
         )
 
+        key = f"certificates/{course.certificate_file.name}"
+
         url = s3.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-            "Key": course.certificate_file.name
-        },
-        ExpiresIn=3600
+            "get_object",
+            Params={
+                "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                "Key": key
+            },
+            ExpiresIn=3600
         )
 
         return Response({
-        "certificate_url": url
-            })
-
+            "certificate_url": url
+        })
     @action(detail=False,url_path='requests',methods=['get'])
     def pending_list(self,request):
         course = Course.objects.filter(approval_status="pending")
