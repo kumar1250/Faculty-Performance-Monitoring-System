@@ -12,7 +12,10 @@ from accounts.models import User
 import boto3
 from django.conf import settings
 
+from rest_framework.parsers import MultiPartParser, FormParser
+
 class CourseDone(ViewSet):
+    parser_classes = [MultiPartParser, FormParser]
     def get_permissions(self):
         if self.action == 'approvecourse':
             permission_classes = [IsHOD]
@@ -75,11 +78,6 @@ class CourseDone(ViewSet):
         except Course.DoesNotExist:
             return Response({"error": "Course not found"},status=status.HTTP_404_NOT_FOUND)
         
-        # if course.user.register_no != user["register_no"]:
-        #     return Response(
-        #         {"error": "Permission denied"},
-        #         status=status.HTTP_403_FORBIDDEN
-        #     )
         course_serializer=CreateCourseSerializer(course,data=request.data)
         if course_serializer.is_valid():
             new_file = request.FILES.get("certificate_file")
