@@ -80,7 +80,7 @@ class CourseDone(ViewSet):
         #         {"error": "Permission denied"},
         #         status=status.HTTP_403_FORBIDDEN
         #     )
-        course_serializer=CreateCourseSerializer(course,data=request.data,partial=True)
+        course_serializer=CreateCourseSerializer(course,data=request.data)
         if course_serializer.is_valid():
             new_file = request.FILES.get("certificate_file")
 
