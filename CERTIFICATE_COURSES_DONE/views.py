@@ -248,7 +248,7 @@ class CourseDone(ViewSet):
             {"error": "User not logged in"},
             status=status.HTTP_401_UNAUTHORIZED
             )
-        if course.user.register_no != user["register_no"]:
+        if course.user.register_no == user["register_no"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN
