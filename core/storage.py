@@ -6,3 +6,6 @@ class CertificateStorage(S3Storage):
 
 class Sessioncertificate(S3Storage):
     location = "session_certificates"
+
+class Patent_certificate(S3Storage):
+    location = "certificates"
