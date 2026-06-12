@@ -9,3 +9,7 @@ class Sessioncertificate(S3Storage):
     
 class ConferenceCertificate(S3Storage):
     location = "conference_certificates"
+
+class Patent_certificate(S3Storage):
+    location = "certificates"
+
