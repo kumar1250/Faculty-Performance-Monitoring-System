@@ -59,12 +59,13 @@ class ProfessionalMembershipViewSet(ViewSet):
     @action(detail=True, url_path='update', methods=['put'])
     def update_membership(self, request, pk=None):
         try:
-            user = decode_token(get_token_from_request(request))
+            decode_token(get_token_from_request(request))
         except Exception:
             return Response(
                 {"error": "User not logged in"},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+    
         try:
             membership = ProfessionalMembership.objects.get(pk=pk)
             old_file = membership.certificate_file
@@ -73,20 +74,86 @@ class ProfessionalMembershipViewSet(ViewSet):
                 {"error": "Membership not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        serializer = CreateProfessionalMembershipSerializer(membership, data=request.data, partial=True)
-        if serializer.is_valid():
-            updated_data = serializer.save()
-            if old_file and old_file != updated_data.certificate_file:
+    
+        organization_name = request.data.get("organization_name")
+        membership_type = request.data.get("membership_type")
+        membership_id = request.data.get("membership_id")
+        membership_date = request.data.get("membership_date")
+        user_id = request.data.get("user")
+        new_file = request.FILES.get("certificate_file")
+    
+        errors = {}
+    
+        if not user_id:
+            errors["user"] = ["This field is required."]
+    
+        if not organization_name:
+            errors["organization_name"] = ["This field is required."]
+        elif len(organization_name.strip()) < 3:
+            errors["organization_name"] = [
+                "Organization name must contain at least 3 characters."
+            ]
+    
+        allowed_membership_types = ["INTERNATIONAL", "NATIONAL"]
+    
+        if not membership_type:
+            errors["membership_type"] = ["This field is required."]
+        elif membership_type not in allowed_membership_types:
+            errors["membership_type"] = [
+                f"Invalid membership type. Allowed values are {allowed_membership_types}"
+            ]
+    
+        if not membership_date:
+            errors["membership_date"] = ["This field is required."]
+    
+        if new_file:
+            allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+            extension = new_file.name.split('.')[-1].lower()
+    
+            if extension not in allowed_extensions:
+                errors["certificate_file"] = [
+                    "Only image files (jpg, jpeg, png, gif, webp) are allowed."
+                ]
+    
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+    
+        membership.user_id = user_id
+        membership.organization_name = organization_name
+        membership.membership_type = membership_type
+        membership.membership_id = membership_id
+        membership.membership_date = membership_date
+    
+        if new_file:
+            if old_file:
                 old_file.delete(save=False)
-            membership.points = 0
-            membership.approval_status = "pending"
-            membership.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            membership.certificate_file = new_file
+    
+        # Reset approval on edit
+        membership.points = 0
+        membership.approval_status = "pending"
+        membership.approved_by = None
+        membership.message = None
+    
+        membership.save()
+    
         return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            {
+                "id": membership.id,
+                "user": membership.user_id,
+                "organization_name": membership.organization_name,
+                "membership_type": membership.membership_type,
+                "membership_id": membership.membership_id,
+                "membership_date": membership.membership_date,
+                "certificate_file": (
+                    membership.certificate_file.url
+                    if membership.certificate_file else None
+                ),
+                "approval_status": membership.approval_status,
+                "points": membership.points,
+            },
+            status=status.HTTP_200_OK
         )
-
     @action(detail=True, url_path='approve', methods=['post'])
     def approve_membership(self, request, pk=None):
         try:
