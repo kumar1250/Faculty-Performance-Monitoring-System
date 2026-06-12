@@ -12,10 +12,10 @@ from accounts.models import User
 import boto3
 from django.conf import settings
 
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser , JSONParser
 
 class CourseDone(ViewSet):
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_permissions(self):
         if self.action == 'approvecourse':
             permission_classes = [IsHOD]
