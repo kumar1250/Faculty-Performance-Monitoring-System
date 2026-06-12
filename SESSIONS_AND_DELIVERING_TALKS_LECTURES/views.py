@@ -8,7 +8,7 @@ from accounts.permissions import IsAuthenticated, IsHOD
 from .serializers import ChairingSessionSerializer,CreateChairingSessionSerializer
 from accounts.models import User
 
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser , JSONParser
 
 
 # Points table:
