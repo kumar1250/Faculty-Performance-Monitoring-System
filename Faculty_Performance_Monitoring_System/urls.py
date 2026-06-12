@@ -21,6 +21,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('course/',include('CERTIFICATE_COURSES_DONE.urls')),
+    path('professional-membership/', include('MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.urls')),
     path('session/',include('SESSIONS_AND_DELIVERING_TALKS_LECTURES.urls')),
     path('conference/',include('CONFERENCE_PUBLICATIONS.urls')),
 ]
