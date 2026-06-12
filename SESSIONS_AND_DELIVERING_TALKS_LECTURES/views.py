@@ -372,7 +372,7 @@ class ChairingSessionViewSet(ViewSet):
             region_name=settings.AWS_S3_REGION_NAME,
         )
 
-        key = f"sessions/{session.certificate_file.name}"
+        key = f"session_certificates/{session.certificate_file.name}"
 
         url = s3.generate_presigned_url(
             "get_object",
