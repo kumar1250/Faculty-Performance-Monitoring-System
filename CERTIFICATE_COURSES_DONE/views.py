@@ -293,7 +293,6 @@ class CourseDone(ViewSet):
             },
             ExpiresIn=3600
         )
-
         return Response({
             "certificate_url": url
         })
