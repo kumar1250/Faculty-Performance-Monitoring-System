@@ -56,7 +56,8 @@ class UserViewSet(ViewSet):
     def user_details(self, request):
         user = decode_token(get_token_from_request(request))
         if user:
-            serializer = UserSerializer(user)
+            data = User.objects.get(id=user['user_id'])
+            serializer = UserRegistrationSerializer(data)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     
@@ -74,10 +75,10 @@ class UserViewSet(ViewSet):
         serializer = UserRegistrationSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['delete'], url_path='delete/', permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['delete'], url_path='delete', permission_classes=[IsAuthenticated])
     def delete_user(self, request, pk=None):
         user = decode_token(get_token_from_request(request))
-        if user and user.role in ['principal', 'dean', 'hod']:
+        if user and user['role'] in ['principal', 'dean', 'hod']:
             try:
                 user_to_delete = User.objects.get(id=pk)
                 user_to_delete.delete()
@@ -90,7 +91,7 @@ class UserViewSet(ViewSet):
     def update_user(self, request, pk=None):
         user = decode_token(get_token_from_request(request))
         
-        if user and user.role in ['principal', 'dean', 'hod']:
+        if user and user['role'] in ['principal', 'dean', 'hod']:
             try:
                 user_to_update = User.objects.get(id=pk)
                 user_to_update_role = user_to_update.role
@@ -112,7 +113,7 @@ class UserViewSet(ViewSet):
                         user_to_update.points += role_points[new_role]
                         user_to_update.points -= role_points[user_to_update_role]
                         user_to_update.save()
-                    return Response(serializer.data, status=status.HTTP_200_OK)
+                    return Response({"username": user_to_update.username,"email": user_to_update.email,"register_no": user_to_update.register_no,"role": user_to_update.role}, status=status.HTTP_200_OK)
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)

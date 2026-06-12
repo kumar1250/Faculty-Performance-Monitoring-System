@@ -22,7 +22,7 @@ class Course(models.Model):
     update_date = models.DateField(auto_now=True)
     approval_status = models.CharField(max_length=10, choices=APPROVAL_STATUS, default='pending', blank=True, null=True)
     approved_by = models.CharField(max_length=100, blank=True, null=True)
-    certificate_file = models.FileField(storage=CertificateStorage(),blank=True, null=True)
+    certificate_file = models.FileField(storage=CertificateStorage(),blank=True,null=True)
     points = models.IntegerField(default=0, blank=True, null=True)
     message =models.TextField(blank=True,null=True)
     def __str__(self):
