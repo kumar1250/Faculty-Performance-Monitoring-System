@@ -42,7 +42,7 @@ POINTS_TABLE = {
 }
 
 class ChairingSessionViewSet(ViewSet):
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser,JSONParser]
 
     def get_permissions(self):
         if self.action in ("approve_session", "pending_list"):
