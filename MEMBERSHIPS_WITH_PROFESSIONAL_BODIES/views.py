@@ -268,7 +268,7 @@ class ProfessionalMembershipViewSet(ViewSet):
             "get_object",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                "Key": f"MembershipStorage/{membership.certificate_file.name}"
+                "Key": f"memberships/{membership.certificate_file.name}"
             },
             ExpiresIn=3600
         )
