@@ -24,4 +24,5 @@ urlpatterns = [
     path('professional-membership/', include('MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.urls')),
     path('session/',include('SESSIONS_AND_DELIVERING_TALKS_LECTURES.urls')),
     path('conference/',include('CONFERENCE_PUBLICATIONS.urls')),
+    path('patents/' ,include('PATENTS.urls')),
 ]
