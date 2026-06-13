@@ -9,7 +9,7 @@ from .serializers import PatentSerializer, CreatePatentSerializer
 from accounts.models import User
 import boto3
 from django.conf import settings
-
+from botocore.client import Config
 
 class PatentViewSet(ViewSet):
     def get_permissions(self):
