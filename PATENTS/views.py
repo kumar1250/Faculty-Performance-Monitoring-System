@@ -278,6 +278,7 @@ class PatentViewSet(ViewSet):
 
     @action(detail=True, url_path='file', methods=['get'])
     def certificate_url(self, request, pk=None):
+    
         try:
             patent = Patent.objects.get(pk=pk)
         except Patent.DoesNotExist:
@@ -300,17 +301,18 @@ class PatentViewSet(ViewSet):
             config=Config(signature_version="s3v4")
         )
     
+        key = f"patent_certificate/{patent.certificate_file.name}"
+    
         url = s3.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                "Key": patent.certificate_file.name
+                "Key": key
             },
             ExpiresIn=3600
         )
     
         return Response({
-            "key": patent.certificate_file.name,
             "certificate_url": url
         })
 
