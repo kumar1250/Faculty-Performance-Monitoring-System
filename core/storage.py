@@ -15,4 +15,4 @@ class ConferenceCertificate(S3Storage):
     location = "conference_certificates"
 
 class Patent_certificate(S3Storage):
-    location = "patent_certificates"
+    location = "patent_certificate"
