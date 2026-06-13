@@ -300,7 +300,7 @@ class PatentViewSet(ViewSet):
             "get_object",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                "Key": f"Patent_Certificate/{patent.certificate_file.name}"
+                "Key": f"{patent.certificate_file.name}"
             },
             ExpiresIn=3600
         )
