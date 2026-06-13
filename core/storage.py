@@ -16,3 +16,6 @@ class ConferenceCertificate(S3Storage):
 
 class Patent_certificate(S3Storage):
     location = "patent_certificate"
+
+class FDPs_Attended_Storage(S3Storage):
+    location = "FDPS_certificate"
