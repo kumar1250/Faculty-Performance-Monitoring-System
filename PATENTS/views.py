@@ -57,6 +57,7 @@ class PatentViewSet(ViewSet):
 
     @action(detail=True, url_path='update', methods=['put'])
     def update_patent(self, request, pk=None):
+    
         try:
             user = decode_token(get_token_from_request(request))
         except Exception:
@@ -64,6 +65,7 @@ class PatentViewSet(ViewSet):
                 {"error": "User not logged in"},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+    
         try:
             patent = Patent.objects.get(pk=pk)
             old_file = patent.certificate_file
@@ -72,20 +74,119 @@ class PatentViewSet(ViewSet):
                 {"error": "Patent not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        patent_serializer = CreatePatentSerializer(patent, data=request.data, partial=True)
-        if patent_serializer.is_valid():
-            updated_data = patent_serializer.save()
-            if old_file and old_file != updated_data.certificate_file:
+    
+        # Get data
+        title = request.data.get("title")
+        patent_number = request.data.get("patent_number")
+        patent_type = request.data.get("patent_type")
+        user_id = request.data.get("user")
+        new_file = request.FILES.get("certificate_file")
+    
+        # Validation
+        errors = {}
+    
+        # User validation
+        if not user_id:
+            errors["user"] = ["This field is required."]
+    
+        # Title validation
+        if not title:
+            errors["title"] = ["This field is required."]
+        elif len(title.strip()) < 3:
+            errors["title"] = [
+                "Title must contain at least 3 characters."
+            ]
+    
+        # Patent Number validation
+        if not patent_number:
+            errors["patent_number"] = ["This field is required."]
+        else:
+            exists = Patent.objects.exclude(pk=pk).filter(
+                patent_number=patent_number
+            ).exists()
+    
+            if exists:
+                errors["patent_number"] = [
+                    "Patent number already exists."
+                ]
+    
+        # Patent Type validation
+        allowed_types = [
+            "GRANTED_FIRST",
+            "GRANTED_OTHER",
+            "PUBLISHED_FIRST",
+            "PUBLISHED_OTHER"
+        ]
+    
+        if not patent_type:
+            errors["patent_type"] = ["This field is required."]
+        elif patent_type not in allowed_types:
+            errors["patent_type"] = [
+                f"Invalid patent type. Allowed values are {allowed_types}"
+            ]
+    
+        # File validation
+        if new_file:
+    
+            allowed_extensions = [
+                'pdf',
+                'jpg',
+                'jpeg',
+                'png'
+            ]
+    
+            extension = new_file.name.split('.')[-1].lower()
+    
+            if extension not in allowed_extensions:
+                errors["certificate_file"] = [
+                    "Only pdf, jpg, jpeg and png files are allowed."
+                ]
+    
+        # Return errors
+        if errors:
+            return Response(
+                errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+        # Update fields
+        patent.user_id = user_id
+        patent.title = title
+        patent.patent_number = patent_number
+        patent.patent_type = patent_type
+    
+        # Update file
+        if new_file:
+    
+            if old_file:
                 old_file.delete(save=False)
-            # Reset approval on update
-            patent.approval_status = "pending"
-            patent.approved_by = None
-            patent.message = None
-            patent.save()
-            return Response(patent_serializer.data, status=status.HTTP_200_OK)
+    
+            patent.certificate_file = new_file
+    
+        # Reset approval
+        patent.approval_status = "pending"
+        patent.approved_by = None
+        patent.message = None
+    
+        # Save (points will be recalculated automatically in model save())
+        patent.save()
+    
         return Response(
-            patent_serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            {
+                "id": patent.id,
+                "user": patent.user_id,
+                "title": patent.title,
+                "patent_number": patent.patent_number,
+                "patent_type": patent.patent_type,
+                "certificate_file": (
+                    patent.certificate_file.url
+                    if patent.certificate_file
+                    else None
+                ),
+                "points": patent.points,
+                "approval_status": patent.approval_status
+            },
+            status=status.HTTP_200_OK
         )
 
     @action(detail=True, url_path='approve', methods=['post'])
@@ -196,7 +297,7 @@ class PatentViewSet(ViewSet):
         )
         url = s3.generate_presigned_url(
             "get_object",
-            key = f"Patent_Certificate/{patent.certificate_file.name}",
+            key = f"patent_certificates/{patent.certificate_file.name}",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
                 "Key": f"Patent_Certificate/{patent.certificate_file.name}"
