@@ -359,26 +359,32 @@ class FDPsAttendedViewSet(ViewSet):
                 {"error": "FDP record not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
         if not fdp.certificate_file:
             return Response(
                 {"error": "No certificate file uploaded"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
         s3 = boto3.client(
             "s3",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
             region_name=settings.AWS_S3_REGION_NAME
         )
+
+        key = f"FDPS_certificate/{fdp.certificate_file.name}"
+
         url = s3.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                "Key": f"FDPs_Attended_Storage/{fdp.certificate_file.name}"
+                "Key": key
             },
             ExpiresIn=3600
         )
-        return Response({"certificate_url": url})
+
+    return Response({"certificate_url": url})
 
     # GET /fdp/requests/
     @action(detail=False, url_path='requests', methods=['get'])
