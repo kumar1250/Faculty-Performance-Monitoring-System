@@ -384,7 +384,7 @@ class FDPsAttendedViewSet(ViewSet):
             ExpiresIn=3600
         )
 
-    return Response({"certificate_url": url})
+        return Response({"certificate_url": url})
 
     # GET /fdp/requests/
     @action(detail=False, url_path='requests', methods=['get'])
