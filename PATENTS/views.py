@@ -285,26 +285,34 @@ class PatentViewSet(ViewSet):
                 {"error": "Patent not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+    
         if not patent.certificate_file:
             return Response(
                 {"error": "No certificate file uploaded"},
                 status=status.HTTP_404_NOT_FOUND
             )
+    
         s3 = boto3.client(
             "s3",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME
+            region_name=settings.AWS_S3_REGION_NAME,
+            config=Config(signature_version="s3v4")
         )
+    
         url = s3.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                "Key": f"patent_certificate/{patent.certificate_file.name}"
+                "Key": patent.certificate_file.name
             },
             ExpiresIn=3600
         )
-        return Response({"certificate_url": url})
+    
+        return Response({
+            "key": patent.certificate_file.name,
+            "certificate_url": url
+        })
 
     @action(detail=False, url_path='requests', methods=['get'])
     def pending_list(self, request):
