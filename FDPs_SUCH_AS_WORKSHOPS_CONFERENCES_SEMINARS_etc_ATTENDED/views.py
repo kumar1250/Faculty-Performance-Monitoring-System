@@ -370,7 +370,7 @@ class FDPsAttendedViewSet(ViewSet):
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
             region_name=settings.AWS_S3_REGION_NAME
         )
-        key = f"FDPs_Attended_Storage/{fdp.certificate_file.name}",
+        key = f"FDPs_Attended_Storage/{fdp.certificate_file.name}"
         url = s3.generate_presigned_url(
             "get_object",
             Params={
