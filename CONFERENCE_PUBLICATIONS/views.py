@@ -56,7 +56,7 @@ class PublicationViewSet(ViewSet):
         serializer = CreatePublicationSerializer(data=request.data)
         if serializer.is_valid():
             user = decode_token(get_token_from_request(request))
-            serializer.save(user=User.objects.get(register_no=user["register_no"]))
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
