@@ -60,7 +60,6 @@ class SubjectContribution(models.Model):
     )
 
     points = models.IntegerField(
-        default=3,
         blank=True,
         null=True
     )
