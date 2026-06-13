@@ -298,7 +298,6 @@ class PatentViewSet(ViewSet):
         )
         url = s3.generate_presigned_url(
             "get_object",
-            key = f"patent_certificates/{patent.certificate_file.name}",
             Params={
                 "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
                 "Key": f"Patent_Certificate/{patent.certificate_file.name}"
