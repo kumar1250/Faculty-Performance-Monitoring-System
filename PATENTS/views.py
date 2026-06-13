@@ -225,6 +225,7 @@ class PatentViewSet(ViewSet):
         patent.approval_status = status_value
         patent.message = message
         patent.approved_by = user["username"]
+        patent.points = 0
 
         if status_value == "rejected":
             if not patent.message:
