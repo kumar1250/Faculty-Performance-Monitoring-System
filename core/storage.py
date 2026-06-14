@@ -29,3 +29,5 @@ class Student_project_Storage(S3Storage):
 class FDPs_Organized_Storage(S3Storage):
     location = "FDPs_Organized_Storage"
 
+class JournalPublicationStorage(S3Storage):
+    location = "Journal_Storage"
