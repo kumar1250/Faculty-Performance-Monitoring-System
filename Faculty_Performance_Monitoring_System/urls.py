@@ -31,4 +31,5 @@ urlpatterns = [
     path('counselling/',include('STUDENT_COUNSELLING_MENTORING.urls')),
     path('consultancy/',include('CONSULTANCY.urls')),
     path('project/',include('STUDENT_PROJECT_WORKS_UNDERTAKEN.urls')),
+    path('journal/',include('JOURNAL_PUBLICATIONS.urls')),
 ]
