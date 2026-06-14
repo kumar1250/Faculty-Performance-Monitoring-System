@@ -31,3 +31,6 @@ class FDPs_Organized_Storage(S3Storage):
 
 class JournalPublicationStorage(S3Storage):
     location = "journal_publications"
+    
+class Book_publication_Storage(S3Storage):
+    location = "book_publications"
