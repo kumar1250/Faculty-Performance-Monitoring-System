@@ -19,3 +19,7 @@ class Patent_certificate(S3Storage):
 
 class FDPs_Attended_Storage(S3Storage):
     location = "FDPS_certificate"
+
+
+class Consultancy_Storage(S3Storage):
+    location = "Consultancy_Storage"
