@@ -136,7 +136,7 @@ class StudentCounsellingViewSet(ViewSet):
 
         if contribution.approval_status == "approved":
             # Points based on total students counselled (e.g., 0.1 point per student)
-            contribution.points = round(contribution.total_students * 0.1, 2)
+            contribution.points = round(contribution.total_students * 2.5, 2)
             contribution.save()
 
         elif contribution.approval_status == "rejected":

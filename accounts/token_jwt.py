@@ -9,7 +9,7 @@ def create_token(user)->str:
         'username': user.username,
         'role': user.role,
         'register_no': user.register_no,
-        'exp': datetime.utcnow() + timedelta(hours=1),
+        'exp': datetime.utcnow() + timedelta(hours=24),
         'iat': datetime.utcnow()
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
