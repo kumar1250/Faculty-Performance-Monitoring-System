@@ -163,7 +163,7 @@ class StudentCounsellingViewSet(ViewSet):
         except Exception:
             return Response({"error": "User not logged in"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if contribution.faculty.register_no == user["register_no"]:
+        if contribution.faculty.register_no != user["register_no"]:
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
         contribution.delete()
