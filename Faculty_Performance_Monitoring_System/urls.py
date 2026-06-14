@@ -28,4 +28,8 @@ urlpatterns = [
     path('fdps-attend/',include('FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ATTENDED.urls')),
     path('research/',include('RESEARCH_GUIDANCE.urls')),
     path('learning/',include('LEARNING_MATERIAL.urls')),
+    
+    
+    
+    path('project/',include('STUDENT_PROJECT_WORKS_UNDERTAKEN.urls')),
 ]
