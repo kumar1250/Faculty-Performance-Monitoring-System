@@ -32,4 +32,5 @@ urlpatterns = [
     path('consultancy/',include('CONSULTANCY.urls')),
     path('project/',include('STUDENT_PROJECT_WORKS_UNDERTAKEN.urls')),
     path('journal/',include('JOURNAL_PUBLICATIONS.urls')),
+    path('fdpsor/',include('FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.urls')),
 ]
