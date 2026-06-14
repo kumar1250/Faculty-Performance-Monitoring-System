@@ -307,7 +307,7 @@ class FDPsOrganizedViewSet(ViewSet):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        if fdp.user.register_no == user["register_no"]:
+        if fdp.user.register_no != user["register_no"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN

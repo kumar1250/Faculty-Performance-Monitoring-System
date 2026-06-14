@@ -332,7 +332,7 @@ class ChairingSessionViewSet(ViewSet):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if session.user.register_no == user["register_no"]:
+        if session.user.register_no != user["register_no"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
