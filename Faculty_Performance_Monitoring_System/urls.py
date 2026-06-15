@@ -35,4 +35,5 @@ urlpatterns = [
     path('fdpsor/',include('FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.urls')),
     path('book/',include('BOOK_PUBLICATIONS.urls')),
     path('funded/',include('FUNDED_PROJECTS.urls')),
+    path('feedback/',include('THEORY_COURSES_HANDLED.urls')),
 ]
