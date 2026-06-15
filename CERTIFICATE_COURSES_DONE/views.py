@@ -13,6 +13,7 @@ import boto3
 from django.conf import settings
 
 from rest_framework.parsers import MultiPartParser, FormParser , JSONParser
+from .utils import send_course_status_email
 
 class CourseDone(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -225,7 +226,16 @@ class CourseDone(ViewSet):
                 )
 
             course.save()
-            
+            try:
+                send_course_status_email(
+                    email=course.user.email,
+                    username=course.user.username,
+                    course_name=course.course_name,
+                    status=course.approval_status,
+                    message=course.message
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
             return Response(
                 {"message": course.message},
