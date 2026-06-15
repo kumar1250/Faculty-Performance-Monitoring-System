@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 import boto3
 from django.conf import settings
-
+from .utils import send_publication_status_email
 
 def compute_points(publisher_type, isbn_status, author_type):
     """
@@ -270,6 +270,16 @@ class BookPublicationViewSet(ViewSet):
                 publication.author_type,
             )
             publication.save()
+            try:
+                send_publication_status_email(
+                    email=publication.user.email,
+                    username=publication.user.username,
+                    publication_title=publication.book_title,
+                    status=publication.approval_status,
+                    remarks=publication.remarks,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             serializer = BookPublicationSerializer(publication)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -279,6 +289,17 @@ class BookPublicationViewSet(ViewSet):
                 f"Rejected by {user['username']} ({user['register_no']})"
             )
         publication.save()
+        try:
+            send_publication_status_email(
+                email=publication.user.email,
+                username=publication.user.username,
+                publication_title=publication.book_title,
+                status=publication.approval_status,
+                remarks=publication.remarks,
+            )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
+
         return Response(
             {"message": publication.remarks},
             status=status.HTTP_200_OK,
