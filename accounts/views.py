@@ -231,4 +231,4 @@ class UserViewSet(ViewSet):
         user.password = new_password  # model.save() will hash it automatically
         user.save()
 
-    return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
