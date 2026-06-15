@@ -121,114 +121,114 @@ class UserViewSet(ViewSet):
         return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
     
 
-# ─────────────────────────────────────────────
-# STEP 1 — User enters email → OTP sent
-# ─────────────────────────────────────────────
-@action(detail=False, methods=['post'], url_path='forgot-password')
-def forgot_password(self, request):
-    serializer = ForgotPasswordSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # ─────────────────────────────────────────────
+    # STEP 1 — User enters email → OTP sent
+    # ─────────────────────────────────────────────
+    @action(detail=False, methods=['post'], url_path='forgot-password')
+    def forgot_password(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    email = serializer.validated_data['email']
+        email = serializer.validated_data['email']
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        # Don't reveal whether email exists or not
-        return Response(
-            {'message': 'If this email exists, an OTP has been sent.'},
-            status=status.HTTP_200_OK
-        )
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Don't reveal whether email exists or not
+            return Response(
+                {'message': 'If this email exists, an OTP has been sent.'},
+                status=status.HTTP_200_OK
+            )
 
-    # Invalidate all old unused OTPs for this user
-    PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+        # Invalidate all old unused OTPs for this user
+        PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
 
-    # Create new OTP
-    otp = PasswordResetOTP.generate_otp()
-    PasswordResetOTP.objects.create(user=user, otp=otp)
+        # Create new OTP
+        otp = PasswordResetOTP.generate_otp()
+        PasswordResetOTP.objects.create(user=user, otp=otp)
 
-    try:
-        send_otp_email(user.email, otp, user.username)
-    except Exception:
-        return Response(
-            {'error': 'Failed to send email. Please try again later.'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        try:
+            send_otp_email(user.email, otp, user.username)
+        except Exception:
+            return Response(
+                {'error': 'Failed to send email. Please try again later.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-    return Response({'message': 'OTP sent to your email.'}, status=status.HTTP_200_OK)
-
-
-# ─────────────────────────────────────────────
-# STEP 2 — User enters OTP → gets reset_token
-# ─────────────────────────────────────────────
-@action(detail=False, methods=['post'], url_path='verify-otp')
-def verify_otp(self, request):
-    serializer = VerifyOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    email = serializer.validated_data['email']
-    otp = serializer.validated_data['otp']
-
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return Response({'error': 'Invalid email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_record = PasswordResetOTP.objects.filter(
-        user=user,
-        otp=otp,
-        is_used=False
-    ).order_by('-created_at').first()
-
-    if not otp_record or not otp_record.is_valid():
-        return Response({'error': 'Invalid or expired OTP.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Generate reset_token and attach to this OTP record
-    reset_token = PasswordResetOTP.generate_reset_token()
-    otp_record.reset_token = reset_token
-    otp_record.save()
-
-    # Return reset_token to frontend (frontend stores it temporarily)
-    return Response({
-        'message': 'OTP verified successfully.',
-        'reset_token': reset_token
-    }, status=status.HTTP_200_OK)
+        return Response({'message': 'OTP sent to your email.'}, status=status.HTTP_200_OK)
 
 
-# ─────────────────────────────────────────────
-# STEP 3 — User enters new password → done
-# (no email or OTP needed again)
-# ─────────────────────────────────────────────
-@action(detail=False, methods=['post'], url_path='reset-password')
-def reset_password(self, request):
-    serializer = ResetPasswordSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # ─────────────────────────────────────────────
+    # STEP 2 — User enters OTP → gets reset_token
+    # ─────────────────────────────────────────────
+    @action(detail=False, methods=['post'], url_path='verify-otp')
+    def verify_otp(self, request):
+        serializer = VerifyOTPSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    reset_token = serializer.validated_data['reset_token']
-    new_password = serializer.validated_data['new_password']
+        email = serializer.validated_data['email']
+        otp = serializer.validated_data['otp']
 
-    # Find OTP record by reset_token
-    otp_record = PasswordResetOTP.objects.filter(
-        reset_token=reset_token,
-        is_used=False
-    ).order_by('-created_at').first()
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid email.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not otp_record or not otp_record.is_valid():
-        return Response(
-            {'error': 'Invalid or expired reset token.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        otp_record = PasswordResetOTP.objects.filter(
+            user=user,
+            otp=otp,
+            is_used=False
+        ).order_by('-created_at').first()
 
-    # Mark as used so this token cannot be reused
-    otp_record.is_used = True
-    otp_record.save()
+        if not otp_record or not otp_record.is_valid():
+            return Response({'error': 'Invalid or expired OTP.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Update the password
-    user = otp_record.user
-    user.password = new_password  # model.save() will hash it automatically
-    user.save()
+        # Generate reset_token and attach to this OTP record
+        reset_token = PasswordResetOTP.generate_reset_token()
+        otp_record.reset_token = reset_token
+        otp_record.save()
 
-    return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
+        # Return reset_token to frontend (frontend stores it temporarily)
+        return Response({
+            'message': 'OTP verified successfully.',
+            'reset_token': reset_token
+        }, status=status.HTTP_200_OK)
+
+
+    # ─────────────────────────────────────────────
+    # STEP 3 — User enters new password → done
+    # (no email or OTP needed again)
+    # ─────────────────────────────────────────────
+    @action(detail=False, methods=['post'], url_path='reset-password')
+    def reset_password(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        reset_token = serializer.validated_data['reset_token']
+        new_password = serializer.validated_data['new_password']
+
+        # Find OTP record by reset_token
+        otp_record = PasswordResetOTP.objects.filter(
+            reset_token=reset_token,
+            is_used=False
+        ).order_by('-created_at').first()
+
+        if not otp_record or not otp_record.is_valid():
+            return Response(
+                {'error': 'Invalid or expired reset token.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Mark as used so this token cannot be reused
+        otp_record.is_used = True
+        otp_record.save()
+
+        # Update the password
+        user = otp_record.user
+        user.password = new_password  # model.save() will hash it automatically
+        user.save()
+
+        return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
