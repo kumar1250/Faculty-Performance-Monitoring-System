@@ -51,3 +51,7 @@ class PasswordResetOTP(models.Model):
     @staticmethod
     def generate_otp():
         return str(random.randint(100000, 999999))
+    
+    @staticmethod
+    def generate_reset_token():
+        return uuid.uuid4().hex
