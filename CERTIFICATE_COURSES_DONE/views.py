@@ -226,7 +226,13 @@ class CourseDone(ViewSet):
                 )
 
             course.save()
-            try:
+
+            return Response(
+                {"message": course.message},
+                status=status.HTTP_200_OK
+            )
+        serializer = CourseSerializer(course)
+        try:
                 send_course_status_email(
                     email=course.user.email,
                     username=course.user.username,
@@ -234,14 +240,8 @@ class CourseDone(ViewSet):
                     status=course.approval_status,
                     message=course.message
                 )
-            except Exception as e:
+        except Exception as e:
                 print(f"Email sending failed: {e}")
-
-            return Response(
-                {"message": course.message},
-                status=status.HTTP_200_OK
-            )
-        serializer = CourseSerializer(course)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=True,url_path='delete',methods=['delete'])
