@@ -1,3 +1,6 @@
+# Environment file
+.env
+
 # Python
 __pycache__/
 *.py[cod]
@@ -5,7 +8,6 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
-.env/
 
 # Django
 db.sqlite3
