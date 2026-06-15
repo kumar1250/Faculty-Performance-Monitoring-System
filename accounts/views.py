@@ -150,9 +150,9 @@ class UserViewSet(ViewSet):
     
         try:
             send_otp_email(user.email, otp, user.username)
-        except Exception:
+        except Exception as e:
             return Response(
-                {'error': 'Failed to send email. Please try again later.'},
+                {'error': f'Failed to send email. Please try again later {str(e)} .'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
