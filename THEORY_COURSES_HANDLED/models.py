@@ -20,7 +20,7 @@ class StudentFeedbackPerformance(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='student_feedback_performances'
+        related_name='student_feedback_performances',
         blank=True,
         null=True
     )
