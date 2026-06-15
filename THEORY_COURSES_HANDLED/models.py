@@ -21,6 +21,8 @@ class StudentFeedbackPerformance(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='student_feedback_performances'
+        blank=True,
+        null=True
     )
 
     academic_year = models.CharField(
