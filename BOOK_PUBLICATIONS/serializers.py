@@ -72,5 +72,5 @@ class CreateBookPublicationSerializer(serializers.ModelSerializer):
             'isbn_number',
             'author_type',
             'publication_date',
-            'proof_document'
+            'certificate_file'
         ]
