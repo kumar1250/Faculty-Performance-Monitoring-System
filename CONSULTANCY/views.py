@@ -13,7 +13,7 @@ import boto3
 from django.conf import settings
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_consultancy_status_email
 
 class ConsultancyViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -238,6 +238,16 @@ class ConsultancyViewSet(ViewSet):
             elif consultancy.position == "OTHER":
                 consultancy.points = 6
             consultancy.save()
+            try:
+                send_consultancy_status_email(
+                    email=consultancy.user.email,
+                    username=consultancy.user.username,
+                    consultancy_title=consultancy.title,  # replace with your actual field name
+                    status=consultancy.approval_status,
+                    message=consultancy.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif consultancy.approval_status == "rejected":
             if not consultancy.message:
@@ -246,11 +256,22 @@ class ConsultancyViewSet(ViewSet):
                     f"({user['register_no']})"
                 )
             consultancy.save()
+            try:
+                send_consultancy_status_email(
+                    email=consultancy.user.email,
+                    username=consultancy.user.username,
+                    consultancy_title=consultancy.title,  # replace with your actual field name
+                    status=consultancy.approval_status,
+                    message=consultancy.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
             return Response(
                 {"message": consultancy.message},
                 status=status.HTTP_200_OK
             )
+            
 
         serializer = ConsultancySerializer(consultancy)
         return Response(serializer.data, status=status.HTTP_200_OK)

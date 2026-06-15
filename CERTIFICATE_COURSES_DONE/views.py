@@ -224,6 +224,16 @@ class CourseDone(ViewSet):
                     f"Rejected by {user['username']} "
                     f"({user['register_no']})"
                 )
+                try:
+                    send_course_status_email(
+                        email=course.user.email,
+                        username=course.user.username,
+                        course_name=course.Course_name,
+                        status=course.approval_status,
+                        message=course.message
+                    )
+                except Exception as e:
+                        print(f"Email sending failed: {e}")
 
             course.save()
 

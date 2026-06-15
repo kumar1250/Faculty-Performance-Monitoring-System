@@ -15,7 +15,7 @@ from django.conf import settings
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-
+from .utils import send_fdp_organized_status_email
 class FDPsOrganizedViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
@@ -271,6 +271,16 @@ class FDPsOrganizedViewSet(ViewSet):
 
             fdp.points = base_points
             fdp.save()
+            try:
+                send_fdp_organized_status_email(
+                email=fdp.user.email,
+                username=fdp.user.username,
+                event_title=fdp.title,  # Replace with your actual field name
+                status=fdp.approval_status,
+                message=fdp.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif fdp.approval_status == "rejected":
             if not fdp.message:
@@ -279,6 +289,17 @@ class FDPsOrganizedViewSet(ViewSet):
                     f"({user['register_no']})"
                 )
             fdp.save()
+            try:
+                send_fdp_organized_status_email(
+                email=fdp.user.email,
+                username=fdp.user.username,
+                event_title=fdp.title,  # Replace with your actual field name
+                status=fdp.approval_status,
+                message=fdp.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
+
             return Response(
                 {"message": fdp.message},
                 status=status.HTTP_200_OK

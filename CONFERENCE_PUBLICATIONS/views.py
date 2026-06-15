@@ -13,7 +13,7 @@ import boto3
 from django.conf import settings
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_publication_status_email
 
 def allocate_points(publication_type, indexing_type, author_type):
     """
@@ -240,6 +240,16 @@ class PublicationViewSet(ViewSet):
                 publication.author_type
             )
             publication.save()
+            try:
+                send_publication_status_email(
+                    email=publication.user.email,
+                    username=publication.user.username,
+                    publication_title=publication.title,  # replace with your actual field name
+                    status=publication.approval_status,
+                    message=publication.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             serializer = PublicationSerializer(publication)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -250,6 +260,16 @@ class PublicationViewSet(ViewSet):
                     f"Rejected by {user['username']} ({user['register_no']})"
                 )
             publication.save()
+            try:
+                send_publication_status_email(
+                    email=publication.user.email,
+                    username=publication.user.username,
+                    publication_title=publication.title,  # replace with your actual field name
+                    status=publication.approval_status,
+                    message=publication.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response({"message": publication.message}, status=status.HTTP_200_OK)
 
     # DELETE /publications/<pk>/delete/

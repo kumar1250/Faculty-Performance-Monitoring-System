@@ -10,7 +10,7 @@ from accounts.models import User
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-
+from .utils import send_project_status_email
 def compute_points(grant_category, investigator_role):
     """
     Points table:
@@ -236,6 +236,16 @@ class FundedProjectViewSet(ViewSet):
                 project.investigator_role,
             )
             project.save()
+            try:
+                send_project_status_email(
+                email=project.user.email,
+                username=project.user.username,
+                project_title=project.project_title,  # replace with your actual field name
+                status=project.approval_status,
+                remarks=project.remarks,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             serializer = FundedProjectSerializer(project)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -245,6 +255,16 @@ class FundedProjectViewSet(ViewSet):
                 f"Rejected by {user['username']} ({user['register_no']})"
             )
         project.save()
+        try:
+            send_project_status_email(
+                email=project.user.email,
+                username=project.user.username,
+                project_title=project.project_title,  # replace with your actual field name
+                status=project.approval_status,
+                remarks=project.remarks,
+                )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
         return Response(
             {"message": project.remarks},
             status=status.HTTP_200_OK,

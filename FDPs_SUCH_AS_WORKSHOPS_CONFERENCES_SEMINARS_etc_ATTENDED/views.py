@@ -9,7 +9,7 @@ from .serializers import FDPsAttendedSerializer, CreateFDPsAttendedSerializer
 from accounts.models import User
 import boto3
 from django.conf import settings
-
+from .utils import send_fdp_status_email
 
 def calculate_fdp_points(category, institute, duration=None, level=None):
     """
@@ -303,6 +303,16 @@ class FDPsAttendedViewSet(ViewSet):
                 level=fdp.level
             )
             fdp.save()
+            try:
+                send_fdp_status_email(
+                    email=fdp.user.email,
+                    username=fdp.user.username,
+                    fdp_title=fdp.title,  # Replace with your actual field name
+                    status=fdp.approval_status,
+                    message=fdp.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             serializer = FDPsAttendedSerializer(fdp)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -313,6 +323,16 @@ class FDPsAttendedViewSet(ViewSet):
                     f"({user['register_no']})"
                 )
             fdp.save()
+            try:
+                send_fdp_status_email(
+                    email=fdp.user.email,
+                    username=fdp.user.username,
+                    fdp_title=fdp.title,  # Replace with your actual field name
+                    status=fdp.approval_status,
+                    message=fdp.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response(
                 {"message": fdp.message},
                 status=status.HTTP_200_OK
