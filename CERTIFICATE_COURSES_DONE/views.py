@@ -230,7 +230,7 @@ class CourseDone(ViewSet):
                 send_course_status_email(
                     email=course.user.email,
                     username=course.user.username,
-                    course_name=course.course_name,
+                    course_name=course.Course_name,
                     status=course.approval_status,
                     message=course.message
                 )
