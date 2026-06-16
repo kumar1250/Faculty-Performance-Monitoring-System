@@ -9,7 +9,7 @@ from accounts.token_jwt import decode_token, get_token_from_request
 from accounts.permissions import IsAuthenticated, IsHOD
 from accounts.models import User
 
-
+from .urls import send_student_feedback_email
 # ------------------------------------------------------------------ #
 # POINTS TABLE
 # ------------------------------------------------------------------ #
@@ -122,6 +122,22 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
         points = compute_points(cycle_1, cycle_2, exam_result)
 
         serializer.save(user=user, points=points)
+        try:
+            send_student_feedback_email(
+                email=user.email,
+                username=user.username,
+                subject_name=serializer.validated_data.get("subject_name"),
+                academic_year=serializer.validated_data.get("academic_year"),
+                cycle_1_feedback=cycle_1,
+                cycle_2_feedback=cycle_2,
+                exam_result=exam_result,
+                points=points,
+                message=serializer.validated_data.get("message"),
+            )
+
+        except Exception as e:
+            # You can log this instead of breaking API response
+            print(f"Email sending failed: {e}")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     # ------------------------------------------------------------------ #

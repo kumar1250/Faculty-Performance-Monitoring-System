@@ -9,7 +9,7 @@ from .serializers import ProfessionalMembershipSerializer, CreateProfessionalMem
 from accounts.models import User
 import boto3
 from django.conf import settings
-
+from .utils import send_membership_status_email
 
 class ProfessionalMembershipViewSet(ViewSet):
 
@@ -198,6 +198,16 @@ class ProfessionalMembershipViewSet(ViewSet):
             elif membership.membership_type == "NATIONAL":
                 membership.points = 8
             membership.save()
+            try:
+                send_membership_status_email(
+                    email=membership.user.email,
+                    username=membership.user.username,
+                    organization_name=membership.organization_name,  # replace with your actual field
+                    status=membership.approval_status,
+                    message=membership.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif membership.approval_status == "rejected":
             if not membership.message:
@@ -206,6 +216,16 @@ class ProfessionalMembershipViewSet(ViewSet):
                     f"({user['register_no']})"
                 )
             membership.save()
+            try:
+                send_membership_status_email(
+                    email=membership.user.email,
+                    username=membership.user.username,
+                    organization_name=membership.organization_name,  # replace with your actual field
+                    status=membership.approval_status,
+                    message=membership.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response(
                 {"message": membership.message},
                 status=status.HTTP_200_OK

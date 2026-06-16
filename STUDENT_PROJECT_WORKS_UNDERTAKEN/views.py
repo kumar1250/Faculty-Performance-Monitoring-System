@@ -11,7 +11,7 @@ from accounts.models import User
 import boto3
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_project_status_email
 
 class StudentProjectWorkViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -182,11 +182,39 @@ class StudentProjectWorkViewSet(ViewSet):
             }
             project.points = points_map.get((project.project_type, project.publication_status), 0)
             project.save()
+            try:
+                send_project_status_email(
+                    email=project.user.email,
+                    username=project.user.username,
+                    project_title=project.project_title,
+                    project_type=project.project_type,
+                    publication_status=project.publication_status,
+                    status=project.approval_status,
+                    points=project.points,
+                    message=project.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
+
 
         elif project.approval_status == "rejected":
             if not project.message:
                 project.message = f"Rejected by {user['username']} ({user['register_no']})"
             project.save()
+            try:
+                send_project_status_email(
+                    email=project.user.email,
+                    username=project.user.username,
+                    project_title=project.project_title,
+                    project_type=project.project_type,
+                    publication_status=project.publication_status,
+                    status=project.approval_status,
+                    points=project.points,
+                    message=project.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
+
             return Response({"message": project.message}, status=status.HTTP_200_OK)
 
         serializer = StudentProjectWorkSerializer(project)

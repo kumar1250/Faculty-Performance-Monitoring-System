@@ -9,7 +9,7 @@ from .serializers import ChairingSessionSerializer,CreateChairingSessionSerializ
 from accounts.models import User
 
 from rest_framework.parsers import MultiPartParser, FormParser , JSONParser
-
+from .utils import send_session_status_email
 
 # Points table:
 #   CHAIRING_SESSION  → INTERNATIONAL=10, NATIONAL=8
@@ -299,7 +299,18 @@ class ChairingSessionViewSet(ViewSet):
                 session.points = 0
 
             session.save()
-
+            try:
+                send_session_status_email(
+                    email=session.user.email,
+                    username=session.user.username,
+                    event_name=session.event_name,
+                    event_type=session.get_event_type_display(),
+                    event_level=session.get_event_level_display(),
+                    status=session.get_approval_status_display(),
+                    message=session.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             serializer = ChairingSessionSerializer(session)
             return Response(serializer.data, status=status.HTTP_200_OK)
         # Rejected path
@@ -308,6 +319,19 @@ class ChairingSessionViewSet(ViewSet):
                 f"Rejected by {user['username']} ({user['register_no']})"
             )
         session.save()
+        try:
+            send_session_status_email(
+                email=session.user.email,
+                username=session.user.username,
+                event_name=session.event_name,
+                event_type=session.get_event_type_display(),
+                event_level=session.get_event_level_display(),
+                status=session.get_approval_status_display(),
+                message=session.message,
+            )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
+
         return Response({"message": session.message}, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
