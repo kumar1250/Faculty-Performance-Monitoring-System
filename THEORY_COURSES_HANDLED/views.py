@@ -9,7 +9,7 @@ from accounts.token_jwt import decode_token, get_token_from_request
 from accounts.permissions import IsAuthenticated, IsHOD
 from accounts.models import User
 
-from .urls import send_student_feedback_email
+from .utils import send_student_feedback_email
 # ------------------------------------------------------------------ #
 # POINTS TABLE
 # ------------------------------------------------------------------ #
