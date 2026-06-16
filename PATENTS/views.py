@@ -10,7 +10,7 @@ from accounts.models import User
 import boto3
 from django.conf import settings
 from botocore.client import Config
-
+from .utils import send_patent_status_email
 class PatentViewSet(ViewSet):
     def get_permissions(self):
         if self.action == 'approve_patent':
@@ -234,6 +234,16 @@ class PatentViewSet(ViewSet):
                     f"({user['register_no']})"
                 )
             patent.save()
+            try:
+                send_patent_status_email(
+                    email=patent.user.email,
+                    username=patent.user.username,
+                    patent_title=patent.title,  # replace with your actual field name
+                    status=patent.approval_status,
+                    message=patent.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response(
                 {"message": patent.message},
                 status=status.HTTP_200_OK
@@ -243,6 +253,16 @@ class PatentViewSet(ViewSet):
         # GRANTED_FIRST -> 10, GRANTED_OTHER -> 9,
         # PUBLISHED_FIRST -> 8, PUBLISHED_OTHER -> 7
         patent.save()
+        try:
+                send_patent_status_email(
+                    email=patent.user.email,
+                    username=patent.user.username,
+                    patent_title=patent.title,  # replace with your actual field name
+                    status=patent.approval_status,
+                    message=patent.message,
+                )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
         serializer = PatentSerializer(patent)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

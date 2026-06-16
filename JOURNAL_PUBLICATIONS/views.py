@@ -11,7 +11,7 @@ from accounts.models import User
 import boto3
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_journal_publication_status_email
 
 class JournalPublicationViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -193,11 +193,31 @@ class JournalPublicationViewSet(ViewSet):
             }
             publication.points = points_map.get((publication.publication_type, publication.author_type), 0)
             publication.save()
+            try:
+                send_journal_publication_status_email(
+                    email=publication.user.email,
+                    username=publication.user.username,
+                    publication_title=publication.publication_title,  # replace with your field name
+                    status=publication.approval_status,
+                    message=publication.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif publication.approval_status == "rejected":
             if not publication.message:
                 publication.message = f"Rejected by {user['username']} ({user['register_no']})"
             publication.save()
+            try:
+                send_journal_publication_status_email(
+                    email=publication.user.email,
+                    username=publication.user.username,
+                    publication_title=publication.publication_title,  # replace with your field name
+                    status=publication.approval_status,
+                    message=publication.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response({"message": publication.message}, status=status.HTTP_200_OK)
 
         serializer = JournalPublicationSerializer(publication)

@@ -12,7 +12,7 @@ from .serializers import ResearchGuidanceSerializer, CreateResearchGuidanceSeria
 from accounts.models import User
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_research_guidance_status_email
 
 def calculate_research_points(guide_type, registration_date, awarded_date, status):
     """
@@ -272,11 +272,31 @@ class ResearchGuidanceViewSet(ViewSet):
                     f"Rejected by {user['username']} ({user['register_no']})"
                 )
             guidance.save()
+            try:
+                send_research_guidance_status_email(
+                    email=guidance.user.email,
+                    username=guidance.user.username,
+                    scholar_name=guidance.scholar_name,  # replace with your actual field name
+                    status=guidance.approval_status,
+                    message=guidance.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response(
                 {"message": guidance.message}, status=status.HTTP_200_OK
             )
 
         guidance.save()
+        try:
+            send_research_guidance_status_email(
+                    email=guidance.user.email,
+                    username=guidance.user.username,
+                    scholar_name=guidance.scholar_name,  # replace with your actual field name
+                    status=guidance.approval_status,
+                    message=guidance.message,
+                )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
         serializer = ResearchGuidanceSerializer(guidance)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

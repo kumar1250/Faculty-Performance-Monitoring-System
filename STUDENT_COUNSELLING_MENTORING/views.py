@@ -8,7 +8,7 @@ from accounts.permissions import IsAuthenticated, IsHOD
 from .serializers import StudentCounsellingSerializer, CreateStudentCounsellingSerializer
 from accounts.models import User
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_counselling_status_email
 
 class StudentCounsellingViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -138,6 +138,17 @@ class StudentCounsellingViewSet(ViewSet):
             # Points based on total students counselled (e.g., 0.1 point per student)
             contribution.points = round(contribution.total_students * 2.5, 2)
             contribution.save()
+            try:
+                send_counselling_status_email(
+                    email=contribution.faculty.email,
+                    username=contribution.faculty.username,
+                    total_students=contribution.total_students,
+                    status=contribution.approval_status.title(),
+                    points=contribution.points,
+                    message=contribution.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif contribution.approval_status == "rejected":
             if not contribution.message:
@@ -145,6 +156,17 @@ class StudentCounsellingViewSet(ViewSet):
                     f"Rejected by {user['username']} ({user['register_no']})"
                 )
             contribution.save()
+            try:
+                send_counselling_status_email(
+                    email=contribution.faculty.email,
+                    username=contribution.faculty.username,
+                    total_students=contribution.total_students,
+                    status=contribution.approval_status.title(),
+                    points=contribution.points,
+                    message=contribution.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response({"message": contribution.message}, status=status.HTTP_200_OK)
 
         serializer = StudentCounsellingSerializer(contribution)

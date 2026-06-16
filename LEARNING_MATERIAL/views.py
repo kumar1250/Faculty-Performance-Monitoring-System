@@ -8,7 +8,7 @@ from accounts.permissions import IsAuthenticated, IsHOD
 from .serializers import SubjectContributionSerializer, CreateSubjectContributionSerializer
 from accounts.models import User
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
+from .utils import send_subject_contribution_status_email
 
 class SubjectContributionViewSet(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -143,6 +143,16 @@ class SubjectContributionViewSet(ViewSet):
             # 3 points per subject as per the points table
             contribution.points = 3
             contribution.save()
+            try:
+                send_subject_contribution_status_email(
+                    email=contribution.user.email,
+                    username=contribution.user.username,
+                    subject_name=contribution.subject_name,  # replace with your actual field name
+                    status=contribution.approval_status,
+                    message=contribution.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
 
         elif contribution.approval_status == "rejected":
             if not contribution.message:
@@ -150,6 +160,16 @@ class SubjectContributionViewSet(ViewSet):
                     f"Rejected by {user['username']} ({user['register_no']})"
                 )
             contribution.save()
+            try:
+                send_subject_contribution_status_email(
+                    email=contribution.user.email,
+                    username=contribution.user.username,
+                    subject_name=contribution.subject_name,  # replace with your actual field name
+                    status=contribution.approval_status,
+                    message=contribution.message,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
             return Response({"message": contribution.message}, status=status.HTTP_200_OK)
 
         serializer = SubjectContributionSerializer(contribution)
