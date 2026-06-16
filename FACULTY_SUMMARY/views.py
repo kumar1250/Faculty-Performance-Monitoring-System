@@ -43,6 +43,20 @@ def _approved_points_sum(queryset):
     return result['total'] or 0.0
 
 
+def _module_summary_no_approval(label, queryset):
+    """For models without an approval_status field — count all records and sum points."""
+    from django.db.models import Sum
+    pts = queryset.aggregate(total=Sum('points'))['total'] or 0.0
+    return {
+        'module':   label,
+        'total':    queryset.count(),
+        'approved': queryset.count(),
+        'pending':  0,
+        'rejected': 0,
+        'points':   pts,
+    }
+
+
 def _module_summary(label, queryset):
     """Return a dict with count/approved/pending/rejected/points for one module."""
     approved_qs = queryset.filter(approval_status='approved')
@@ -116,8 +130,8 @@ def _build_faculty_detail(user_obj):
         _module_summary("Student Project Works",
                         StudentProjectWork.objects.filter(user=user_obj)),
 
-        _module_summary("Theory Courses Handled",
-                        StudentFeedbackPerformance.objects.filter(user=user_obj)),
+        _module_summary_no_approval("Theory Courses Handled",
+                                    StudentFeedbackPerformance.objects.filter(user=user_obj)),
     ]
 
     total_points = sum(m['points'] for m in modules)
