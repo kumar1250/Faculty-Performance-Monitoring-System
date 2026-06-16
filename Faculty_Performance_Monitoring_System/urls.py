@@ -36,4 +36,5 @@ urlpatterns = [
     path('book/',include('BOOK_PUBLICATIONS.urls')),
     path('funded/',include('FUNDED_PROJECTS.urls')),
     path('feedback/',include('THEORY_COURSES_HANDLED.urls')),
+    path('summary/', include('FACULTY_SUMMARY.urls')),
 ]
