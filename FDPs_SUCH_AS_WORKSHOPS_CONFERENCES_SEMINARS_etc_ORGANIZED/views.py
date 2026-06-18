@@ -55,7 +55,7 @@ class FDPsOrganizedViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        fdps = user.fdps_organized.all()
+        fdps = user.fdps_organizeds.all()
         serializer = FDPsOrganizedSerializer(fdps, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
