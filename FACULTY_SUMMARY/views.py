@@ -252,6 +252,16 @@ def _rank_of_user(ranked_rows, user_id):
     return None
 
 
+def _serialize_basic_user(u):
+    return {
+        'user_id':     u.id,
+        'register_no': u.register_no,
+        'username':    u.username,
+        'email':       u.email,
+        'role':        u.role,
+    }
+
+
 # ── ViewSet ───────────────────────────────────────────────────────────────────
 
 class FacultySummaryViewSet(ViewSet):
@@ -270,12 +280,20 @@ class FacultySummaryViewSet(ViewSet):
     GET  /summary/faculty-summary/by-register-full/?register_no=<register_no>
         -> EVERY full record (all fields) for every module, for one faculty,
            looked up by register_no. This is the "enter register number,
-           get everything" endpoint.
+           get everything" endpoint. Works for ANY role, not just faculty.
 
-    GET  /summary/faculty-summary/dashboard/?register_no=<register_no>&role=faculty
+    GET  /summary/faculty-summary/search/?q=<text>
+        -> Search ALL users (any role — faculty, HOD, principal, dean, etc.)
+           by partial register_no or username match. Returns a short list
+           of {user_id, register_no, username, email, role} so the frontend
+           can build a live search/autocomplete box without pulling the
+           entire accounts list and filtering client-side.
+
+    GET  /summary/faculty-summary/dashboard/?register_no=<register_no>&role=all
         -> The all-in-one view: same full module breakdown as by-register-full,
-           PLUS that faculty's live rank among peers and points behind #1.
-           This is the one to use for a single faculty's dashboard screen.
+           PLUS that user's live rank among peers and points behind #1.
+           Defaults to ranking against ALL users; pass ?role=faculty to
+           narrow the peer group to one role.
 
     GET  /summary/faculty-summary/total-points/
         -> Own total approved points only.
@@ -283,14 +301,15 @@ class FacultySummaryViewSet(ViewSet):
     GET  /summary/faculty-summary/total-points-by-user/?user_id=<id>
         -> Total approved points for a specific user_id.
 
-    GET  /summary/faculty-summary/all-faculty/
-        -> List of all faculty with their total points (unranked, register_no order).
+    GET  /summary/faculty-summary/all-faculty/?role=all
+        -> List of all users with their total points (unranked, register_no
+           order). Defaults to ALL roles now; pass ?role=faculty to narrow.
 
-    GET  /summary/faculty-summary/leaderboard/?role=faculty
-        -> All faculty ranked by total points, HIGHEST FIRST, with rank numbers.
+    GET  /summary/faculty-summary/leaderboard/?role=all
+        -> All users ranked by total points, HIGHEST FIRST, with rank numbers.
            Dense ranking: ties share a rank, next score continues +1 with no
            gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
-           Optional ?role= filter (default 'faculty', pass 'all' for everyone).
+           Defaults to ALL roles; pass ?role=faculty (or hod/dean/etc.) to narrow.
     """
 
     def get_permissions(self):
@@ -398,6 +417,48 @@ class FacultySummaryViewSet(ViewSet):
         return Response(_build_faculty_full_detail(user_obj, request), status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
+    # SEARCH — across ALL users, any role
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path='search', methods=['get'])
+    def search_users(self, request):
+        """
+        Live search across every user, regardless of role.
+        Matches partial register_no OR partial username (case-insensitive).
+
+        GET /summary/faculty-summary/search/?q=21A1
+        GET /summary/faculty-summary/search/?q=kumar
+        GET /summary/faculty-summary/search/?q=21A1&role=hod   (optional role narrowing)
+        """
+        jwt_payload = _get_authenticated_user(request)
+        if not jwt_payload:
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+            return Response(
+                {'error': 'You do not have permission to search other users.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        query = request.query_params.get('q', '').strip()
+        if not query:
+            return Response({'error': 'q query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.db.models import Q
+
+        matches = User.objects.filter(
+            Q(register_no__icontains=query) | Q(username__icontains=query)
+        )
+
+        role_filter = request.query_params.get('role')
+        if role_filter:
+            matches = matches.filter(role=role_filter)
+
+        matches = matches.order_by('register_no')[:25]   # cap results for a search box
+
+        results = [_serialize_basic_user(u) for u in matches]
+        return Response({'count': len(results), 'results': results}, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
     # TOTAL POINTS — own
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='total-points', methods=['get'])
@@ -492,8 +553,9 @@ class FacultySummaryViewSet(ViewSet):
         # Full per-module breakdown for this one user.
         full_detail = _build_faculty_full_detail(user_obj, request)
 
-        # Rank that user against their peer group.
-        role_filter = request.query_params.get('role', user_obj.role)
+        # Rank that user against their peer group. Defaults to ALL users now;
+        # pass ?role=<role> to narrow the comparison to one role.
+        role_filter = request.query_params.get('role', 'all')
         peers = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
 
         rows = []
@@ -533,8 +595,10 @@ class FacultySummaryViewSet(ViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        role_filter = request.query_params.get('role', 'faculty')
-        users = User.objects.filter(role=role_filter).order_by('register_no')
+        # Defaults to ALL roles now; pass ?role=faculty (or hod/dean/etc.) to narrow.
+        role_filter = request.query_params.get('role', 'all')
+        users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
+        users = users.order_by('register_no')
 
         results = []
         for u in users:
@@ -570,7 +634,7 @@ class FacultySummaryViewSet(ViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        role_filter = request.query_params.get('role', 'faculty')
+        role_filter = request.query_params.get('role', 'all')
         users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
 
         rows = []
