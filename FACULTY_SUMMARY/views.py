@@ -74,7 +74,7 @@ def _get_authenticated_user(request):
 
 def _approved_points_sum(queryset):
     result = queryset.filter(approval_status='approved').aggregate(total=Sum('points'))
-    return result['total'] or 0
+    return float(result['total'] or 0)
 
 
 def _module_summary_no_approval(label, queryset):
@@ -86,7 +86,10 @@ def _module_summary_no_approval(label, queryset):
         'approved': queryset.count(),
         'pending':  0,
         'rejected': 0,
-        'points':   pts,
+        # Different apps store `points` as FloatField vs DecimalField, so Sum()
+        # can return either a float or a Decimal depending on the model.
+        # Normalize to float here so later sum()/sort() calls never mix types.
+        'points':   float(pts),
     }
 
 
@@ -104,7 +107,8 @@ def _module_summary(label, queryset):
         'approved': approved_qs.count(),
         'pending':  pending_qs.count(),
         'rejected': rejected_qs.count(),
-        'points':   pts,
+        # Normalize to float — same reasoning as above.
+        'points':   float(pts),
     }
 
 
