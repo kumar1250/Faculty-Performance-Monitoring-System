@@ -1,593 +1,313 @@
-from django.db.models import Sum
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-
-from accounts.models import User
-from accounts.serializers import UserSerializer
+from .models import FundedProject
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD, IsPrincipal, IsDean
+from accounts.permissions import IsAuthenticated, IsHOD
+from .serializers import FundedProjectSerializer, CreateFundedProjectSerializer
+from accounts.models import User
 
-# ── per-app model + serializer imports ───────────────────────────────────────
-from BOOK_PUBLICATIONS.models import BookPublication
-from BOOK_PUBLICATIONS.serializers import BookPublicationSerializer
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-from CERTIFICATE_COURSES_DONE.models import Course
-from CERTIFICATE_COURSES_DONE.serializers import CourseSerializer
+from .utils import send_project_status_email
+def compute_points(grant_category, investigator_role):
+    """
+    Points table:
 
-from CONFERENCE_PUBLICATIONS.models import Publication
-from CONFERENCE_PUBLICATIONS.serializers import PublicationSerializer
-
-from CONSULTANCY.models import Consultancy
-from CONSULTANCY.serializers import ConsultancySerializer
-
-from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ATTENDED.models import FDPs_Attended
-from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ATTENDED.serializers import FDPsAttendedSerializer
-
-from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.models import FDPs_Organized
-from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.serializers import FDPsOrganizedSerializer
-
-from FUNDED_PROJECTS.models import FundedProject
-from FUNDED_PROJECTS.serializers import FundedProjectSerializer
-
-from JOURNAL_PUBLICATIONS.models import JournalPublication
-from JOURNAL_PUBLICATIONS.serializers import JournalPublicationSerializer
-
-from LEARNING_MATERIAL.models import SubjectContribution
-from LEARNING_MATERIAL.serializers import SubjectContributionSerializer
-
-from MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.models import ProfessionalMembership
-from MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.serializers import ProfessionalMembershipSerializer
-
-from PATENTS.models import Patent
-from PATENTS.serializers import PatentSerializer
-
-from RESEARCH_GUIDANCE.models import ResearchGuidance
-from RESEARCH_GUIDANCE.serializers import ResearchGuidanceSerializer
-
-from SESSIONS_AND_DELIVERING_TALKS_LECTURES.models import ChairingSession
-from SESSIONS_AND_DELIVERING_TALKS_LECTURES.serializers import ChairingSessionSerializer
-
-from STUDENT_COUNSELLING_MENTORING.models import StudentCounselling
-from STUDENT_COUNSELLING_MENTORING.serializers import StudentCounsellingSerializer
-
-from STUDENT_PROJECT_WORKS_UNDERTAKEN.models import StudentProjectWork
-from STUDENT_PROJECT_WORKS_UNDERTAKEN.serializers import StudentProjectWorkSerializer
-
-from THEORY_COURSES_HANDLED.models import StudentFeedbackPerformance
-from THEORY_COURSES_HANDLED.serializers import StudentFeedbackPerformanceSerializer
-
-
-PRIVILEGED_ROLES = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _get_authenticated_user(request):
-    """Return the decoded JWT payload or None."""
-    token = get_token_from_request(request)
-    if not token:
-        return None
-    return decode_token(token)
-
-
-def _approved_points_sum(queryset):
-    result = queryset.filter(approval_status='approved').aggregate(total=Sum('points'))
-    return result['total'] or 0
-
-
-def _module_summary_no_approval(label, queryset):
-    """For models without an approval_status field — count all records and sum points."""
-    pts = queryset.aggregate(total=Sum('points'))['total'] or 0
-    return {
-        'module':   label,
-        'total':    queryset.count(),
-        'approved': queryset.count(),
-        'pending':  0,
-        'rejected': 0,
-        'points':   pts,
+    More than 10 lakhs  ->  PI: 10  |  Co-PI: 9
+    5 to 10 lakhs       ->  PI: 9   |  Co-PI: 8
+    Less than 5 lakhs   ->  PI: 8   |  Co-PI: 7
+    """
+    table = {
+        ("gt_10", "pi"):    10,
+        ("gt_10", "co_pi"):  9,
+        ("5_10",  "pi"):     9,
+        ("5_10",  "co_pi"):  8,
+        ("lt_5",  "pi"):     8,
+        ("lt_5",  "co_pi"):  7,
     }
+    return table.get((grant_category, investigator_role), 0)
 
 
-def _module_summary(label, queryset):
-    """Return a dict with count/approved/pending/rejected/points for one module."""
-    approved_qs = queryset.filter(approval_status='approved')
-    pending_qs  = queryset.filter(approval_status='pending')
-    rejected_qs = queryset.filter(approval_status='rejected')
-
-    pts = approved_qs.aggregate(total=Sum('points'))['total'] or 0
-
-    return {
-        'module':   label,
-        'total':    queryset.count(),
-        'approved': approved_qs.count(),
-        'pending':  pending_qs.count(),
-        'rejected': rejected_qs.count(),
-        'points':   pts,
-    }
-
-
-# Config used by both the lightweight summary and the full-detail builders.
-# (label, queryset_fn(user_obj), serializer_class, has_approval_status)
-def _module_config(user_obj):
-    return [
-        ("Book Publications",
-         BookPublication.objects.filter(user=user_obj), BookPublicationSerializer, True),
-
-        ("Certificate Courses Done",
-         Course.objects.filter(user=user_obj), CourseSerializer, False),
-
-        ("Conference Publications",
-         Publication.objects.filter(user=user_obj), PublicationSerializer, True),
-
-        ("Consultancy",
-         Consultancy.objects.filter(user=user_obj), ConsultancySerializer, True),
-
-        ("FDPs Attended",
-         FDPs_Attended.objects.filter(user=user_obj), FDPsAttendedSerializer, True),
-
-        ("FDPs Organized",
-         FDPs_Organized.objects.filter(user=user_obj), FDPsOrganizedSerializer, True),
-
-        ("Funded Projects",
-         FundedProject.objects.filter(user=user_obj), FundedProjectSerializer, True),
-
-        ("Journal Publications",
-         JournalPublication.objects.filter(user=user_obj), JournalPublicationSerializer, True),
-
-        ("Learning Material",
-         SubjectContribution.objects.filter(user=user_obj), SubjectContributionSerializer, False),
-
-        ("Memberships with Professional Bodies",
-         ProfessionalMembership.objects.filter(user=user_obj), ProfessionalMembershipSerializer, False),
-
-        ("Patents",
-         Patent.objects.filter(user=user_obj), PatentSerializer, True),
-
-        ("Research Guidance",
-         ResearchGuidance.objects.filter(user=user_obj), ResearchGuidanceSerializer, True),
-
-        ("Sessions & Delivering Talks/Lectures",
-         ChairingSession.objects.filter(user=user_obj), ChairingSessionSerializer, True),
-
-        # StudentCounselling uses 'faculty' FK instead of 'user'
-        ("Student Counselling / Mentoring",
-         StudentCounselling.objects.filter(faculty=user_obj), StudentCounsellingSerializer, False),
-
-        ("Student Project Works",
-         StudentProjectWork.objects.filter(user=user_obj), StudentProjectWorkSerializer, True),
-
-        ("Theory Courses Handled",
-         StudentFeedbackPerformance.objects.filter(user=user_obj), StudentFeedbackPerformanceSerializer, False),
-    ]
-
-
-def _build_faculty_detail(user_obj):
-    """Lightweight version — counts + points only (used by existing endpoints)."""
-    modules = []
-    for label, qs, _serializer_cls, has_approval in _module_config(user_obj):
-        if has_approval:
-            modules.append(_module_summary(label, qs))
-        else:
-            modules.append(_module_summary_no_approval(label, qs))
-
-    total_points = sum(m['points'] for m in modules)
-
-    return {
-        'user_id':      user_obj.id,
-        'register_no':  user_obj.register_no,
-        'username':     user_obj.username,
-        'email':        user_obj.email,
-        'role':         user_obj.role,
-        'modules':      modules,
-        'total_points': total_points,
-    }
-
-
-def _build_faculty_full_detail(user_obj, request):
-    """
-    Full version — every record's complete field data for every module,
-    plus the same counts/points summary, plus total points.
-    """
-    modules = []
-    for label, qs, serializer_cls, has_approval in _module_config(user_obj):
-        records = serializer_cls(qs, many=True, context={'request': request}).data
-
-        if has_approval:
-            summary = _module_summary(label, qs)
-        else:
-            summary = _module_summary_no_approval(label, qs)
-
-        modules.append({
-            'module':   label,
-            'total':    summary['total'],
-            'approved': summary['approved'],
-            'pending':  summary['pending'],
-            'rejected': summary['rejected'],
-            'points':   summary['points'],
-            'records':  records,   # <-- every field of every record in this module
-        })
-
-    total_points = sum(m['points'] for m in modules)
-
-    return {
-        'user_id':      user_obj.id,
-        'register_no':  user_obj.register_no,
-        'username':     user_obj.username,
-        'email':        user_obj.email,
-        'role':         user_obj.role,
-        'modules':      modules,
-        'total_points': total_points,
-    }
-
-
-def _assign_ranks(rows):
-    """
-    Dense ranking: equal points share the same rank, and the next distinct
-    score simply continues at (previous_rank + 1) — no gaps.
-    e.g. points [90, 80, 80, 70] -> ranks [1, 2, 2, 3]
-    """
-    ranked = []
-    previous_points = None
-    current_rank = 0
-    for row in rows:
-        if row['total_points'] != previous_points:
-            current_rank += 1
-            previous_points = row['total_points']
-        row_with_rank = {'rank': current_rank, **row}
-        ranked.append(row_with_rank)
-    return ranked
-
-
-def _rank_of_user(ranked_rows, user_id):
-    """Find a specific user's rank/row inside an already-ranked leaderboard list."""
-    for row in ranked_rows:
-        if row['user_id'] == user_id:
-            return row
-    return None
-
-
-# ── ViewSet ───────────────────────────────────────────────────────────────────
-
-class FacultySummaryViewSet(ViewSet):
-    """
-    Endpoints
-    ---------
-    GET  /summary/faculty-summary/my-summary/
-        -> Own module details (counts + points) for the logged-in user.
-
-    GET  /summary/faculty-summary/by-user/?user_id=<id>
-        -> Module details (counts + points) for a specific user_id.
-
-    GET  /summary/faculty-summary/by-register/?register_no=<register_no>
-        -> Module details (counts + points) looked up by register_no.
-
-    GET  /summary/faculty-summary/by-register-full/?register_no=<register_no>
-        -> EVERY full record (all fields) for every module, for one faculty,
-           looked up by register_no. This is the "enter register number,
-           get everything" endpoint.
-
-    GET  /summary/faculty-summary/dashboard/?register_no=<register_no>&role=faculty
-        -> The all-in-one view: same full module breakdown as by-register-full,
-           PLUS that faculty's live rank among peers and points behind #1.
-           This is the one to use for a single faculty's dashboard screen.
-
-    GET  /summary/faculty-summary/total-points/
-        -> Own total approved points only.
-
-    GET  /summary/faculty-summary/total-points-by-user/?user_id=<id>
-        -> Total approved points for a specific user_id.
-
-    GET  /summary/faculty-summary/all-faculty/
-        -> List of all faculty with their total points (unranked, register_no order).
-
-    GET  /summary/faculty-summary/leaderboard/?role=faculty
-        -> All faculty ranked by total points, HIGHEST FIRST, with rank numbers.
-           Dense ranking: ties share a rank, next score continues +1 with no
-           gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
-           Optional ?role= filter (default 'faculty', pass 'all' for everyone).
-    """
+class FundedProjectViewSet(ViewSet):
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_permissions(self):
-        # Tighten these to IsHOD / IsPrincipal / IsDean if you want to lock
-        # down who can see other people's data.
-        return [IsAuthenticated()]
+        if self.action in ("approve_project", "pending_list"):
+            permission_classes = [IsHOD]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
     # ------------------------------------------------------------------ #
-    # MY SUMMARY
+    # CREATE  POST /funded-projects/create/
     # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='my-summary', methods=['get'])
-    def my_summary(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+    @action(detail=False, url_path="create", methods=["post"])
+    def create_project(self, request):
+        serializer = CreateFundedProjectSerializer(data=request.data)
+        if serializer.is_valid():
+            user = decode_token(get_token_from_request(request))
+            serializer.save(user=User.objects.get(register_no=user["register_no"]))
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # ------------------------------------------------------------------ #
+    # LIST ALL  GET /funded-projects/list/
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path="list", methods=["get"])
+    def projects_list(self, request):
+        projects = FundedProject.objects.all()
+        serializer = FundedProjectSerializer(projects, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # LIST BY USER  GET /funded-projects/user/<register_no>/
+    # ------------------------------------------------------------------ #
+    @action(
+        detail=False,
+        url_path=r"user/(?P<register_no>[^/.]+)",
+        methods=["get"],
+    )
+    def user_projects(self, request, register_no=None):
         try:
-            user_obj = User.objects.get(id=jwt_payload['user_id'])
+            user = User.objects.get(register_no=register_no)
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
-
-    # ------------------------------------------------------------------ #
-    # BY USER ID
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='by-user', methods=['get'])
-    def by_user(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
             return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
-                status=status.HTTP_403_FORBIDDEN,
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        projects = user.funded_projects.all()
+        serializer = FundedProjectSerializer(projects, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # UPDATE  PUT /funded-projects/<pk>/update/
+    # ------------------------------------------------------------------ #
+    @action(detail=True, url_path="update", methods=["put"])
+    def update_project(self, request, pk=None):
+        try:
+            user = decode_token(get_token_from_request(request))
+        except Exception:
+            return Response(
+                {"error": "User not logged in"},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        user_id = request.query_params.get('user_id')
+        try:
+            project = FundedProject.objects.get(pk=pk)
+        except FundedProject.DoesNotExist:
+            return Response(
+                {"error": "Funded project not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Collect fields
+        project_title      = request.data.get("project_title")
+        funding_agency     = request.data.get("funding_agency")
+        grant_amount       = request.data.get("grant_amount")
+        grant_category     = request.data.get("grant_category")
+        investigator_role  = request.data.get("investigator_role")
+        sanction_date      = request.data.get("sanction_date")
+        completion_date    = request.data.get("completion_date")
+        user_id            = request.data.get("user")
+
+        # ---- Validation ------------------------------------------------
+        errors = {}
+
         if not user_id:
-            return Response({'error': 'user_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            errors["user"] = ["This field is required."]
 
-        try:
-            user_obj = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not project_title:
+            errors["project_title"] = ["This field is required."]
+        elif len(project_title.strip()) < 3:
+            errors["project_title"] = ["Project title must be at least 3 characters."]
 
-        return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
+        if not funding_agency:
+            errors["funding_agency"] = ["This field is required."]
 
-    # ------------------------------------------------------------------ #
-    # BY REGISTER NO (counts + points only)
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='by-register', methods=['get'])
-    def by_register(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+        if not grant_amount:
+            errors["grant_amount"] = ["This field is required."]
 
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
-            return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        allowed_grant_categories = ["gt_10", "5_10", "lt_5"]
+        if not grant_category:
+            errors["grant_category"] = ["This field is required."]
+        elif grant_category not in allowed_grant_categories:
+            errors["grant_category"] = [
+                f"Invalid grant category. Allowed: {allowed_grant_categories}"
+            ]
 
-        register_no = request.query_params.get('register_no')
-        if not register_no:
-            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        allowed_roles = ["pi", "co_pi"]
+        if not investigator_role:
+            errors["investigator_role"] = ["This field is required."]
+        elif investigator_role not in allowed_roles:
+            errors["investigator_role"] = [
+                f"Invalid investigator role. Allowed: {allowed_roles}"
+            ]
 
-        try:
-            user_obj = User.objects.get(register_no=register_no)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
+        if not sanction_date:
+            errors["sanction_date"] = ["This field is required."]
 
-        return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # ------------------------------------------------------------------ #
-    # BY REGISTER NO — FULL DETAIL  (every module, every field)
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='by-register-full', methods=['get'])
-    def by_register_full(self, request):
-        """
-        Enter a register_no, get back every module the faculty has any
-        record in, with every field of every record, plus per-module and
-        overall point totals.
-        """
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+        # ---- Apply updates ---------------------------------------------
+        project.user_id           = user_id
+        project.project_title     = project_title
+        project.funding_agency    = funding_agency
+        project.grant_amount      = grant_amount
+        project.grant_category    = grant_category
+        project.investigator_role = investigator_role
+        project.sanction_date     = sanction_date
+        project.completion_date   = completion_date
 
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
-            return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Reset approval on update
+        project.points          = 0
+        project.approval_status = "pending"
+        project.save()
 
-        register_no = request.query_params.get('register_no')
-        if not register_no:
-            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            user_obj = User.objects.get(register_no=register_no)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response(_build_faculty_full_detail(user_obj, request), status=status.HTTP_200_OK)
-
-    # ------------------------------------------------------------------ #
-    # TOTAL POINTS — own
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='total-points', methods=['get'])
-    def total_points(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            user_obj = User.objects.get(id=jwt_payload['user_id'])
-        except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        detail = _build_faculty_detail(user_obj)
         return Response(
             {
-                'user_id':      user_obj.id,
-                'register_no':  user_obj.register_no,
-                'username':     user_obj.username,
-                'total_points': detail['total_points'],
+                "id":                project.id,
+                "user":              project.user_id,
+                "project_title":     project.project_title,
+                "funding_agency":    project.funding_agency,
+                "grant_amount":      str(project.grant_amount),
+                "grant_category":    project.grant_category,
+                "investigator_role": project.investigator_role,
+                "sanction_date":     str(project.sanction_date),
+                "completion_date":   str(project.completion_date) if project.completion_date else None,
+                "approval_status":   project.approval_status,
+                "points":            project.points,
             },
             status=status.HTTP_200_OK,
         )
 
     # ------------------------------------------------------------------ #
-    # TOTAL POINTS BY USER ID
+    # APPROVE / REJECT  POST /funded-projects/<pk>/approve/
     # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='total-points-by-user', methods=['get'])
-    def total_points_by_user(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+    @action(detail=True, url_path="approve", methods=["post"])
+    def approve_project(self, request, pk=None):
+        try:
+            user = decode_token(get_token_from_request(request))
+        except Exception:
             return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
+                {"error": "User not logged in"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            project = FundedProject.objects.get(pk=pk)
+        except FundedProject.DoesNotExist:
+            return Response(
+                {"error": "Funded project not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if project.approval_status in ("approved", "rejected"):
+            return Response(
+                {"error": "Request already processed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # HOD cannot approve their own submission
+        if project.user.register_no == user["register_no"]:
+            return Response(
+                {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        user_id = request.query_params.get('user_id')
-        if not user_id:
-            return Response({'error': 'user_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        status_value = request.data.get("status")
+        remarks      = request.data.get("remarks")
 
+        if status_value not in ("approved", "rejected"):
+            return Response(
+                {"error": "Invalid status. Use 'approved' or 'rejected'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project.approval_status = status_value
+        project.remarks         = remarks
+        project.approved_by     = user["username"]
+
+        if status_value == "approved":
+            project.points = compute_points(
+                project.grant_category,
+                project.investigator_role,
+            )
+            project.save()
+            try:
+                send_project_status_email(
+                email=project.user.email,
+                username=project.user.username,
+                project_title=project.project_title,  # replace with your actual field name
+                status=project.approval_status,
+                remarks=project.remarks,
+                )
+            except Exception as e:
+                print(f"Email sending failed: {e}")
+            serializer = FundedProjectSerializer(project)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # Rejected
+        if not project.remarks:
+            project.remarks = (
+                f"Rejected by {user['username']} ({user['register_no']})"
+            )
+        project.save()
         try:
-            user_obj = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        detail = _build_faculty_detail(user_obj)
+            send_project_status_email(
+                email=project.user.email,
+                username=project.user.username,
+                project_title=project.project_title,  # replace with your actual field name
+                status=project.approval_status,
+                remarks=project.remarks,
+                )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
         return Response(
-            {
-                'user_id':      user_obj.id,
-                'register_no':  user_obj.register_no,
-                'username':     user_obj.username,
-                'total_points': detail['total_points'],
-            },
+            {"message": project.remarks},
             status=status.HTTP_200_OK,
         )
 
     # ------------------------------------------------------------------ #
-    # DASHBOARD  – full module detail + live rank, in one call
+    # DELETE  DELETE /funded-projects/<pk>/delete/
     # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='dashboard', methods=['get'])
-    def dashboard(self, request):
-        """
-        The all-in-one screen: enter a register_no and get back
-          - every module, every record, every field (same as by-register-full)
-          - that faculty's current rank among their peers (dense rank: 1,2,2,3)
-          - how many points separate them from the #1 spot
-
-        GET /summary/faculty-summary/dashboard/?register_no=21A1234&role=faculty
-        """
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+    @action(detail=True, url_path="delete", methods=["delete"])
+    def delete_project(self, request, pk=None):
+        try:
+            project = FundedProject.objects.get(pk=pk)
+        except FundedProject.DoesNotExist:
             return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
-                status=status.HTTP_403_FORBIDDEN,
+                {"error": "Funded project not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
-
-        register_no = request.query_params.get('register_no')
-        if not register_no:
-            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user_obj = User.objects.get(register_no=register_no)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
-
-        # Full per-module breakdown for this one user.
-        full_detail = _build_faculty_full_detail(user_obj, request)
-
-        # Rank that user against their peer group.
-        role_filter = request.query_params.get('role', user_obj.role)
-        peers = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
-
-        rows = []
-        for u in peers:
-            detail = _build_faculty_detail(u)
-            rows.append({
-                'user_id':      u.id,
-                'register_no':  u.register_no,
-                'username':     u.username,
-                'total_points': detail['total_points'],
-            })
-        rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
-        ranked_rows = _assign_ranks(rows)
-
-        my_rank_row = _rank_of_user(ranked_rows, user_obj.id)
-        top_score = ranked_rows[0]['total_points'] if ranked_rows else 0
-        points_behind_first = max(top_score - full_detail['total_points'], 0)
-
-        full_detail['rank'] = my_rank_row['rank'] if my_rank_row else None
-        full_detail['peer_group_size'] = len(ranked_rows)
-        full_detail['points_behind_first'] = points_behind_first
-
-        return Response(full_detail, status=status.HTTP_200_OK)
-
-    # ------------------------------------------------------------------ #
-    # ALL FACULTY  – list with points (unranked, register_no order)
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='all-faculty', methods=['get'])
-    def all_faculty(self, request):
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+            user = decode_token(get_token_from_request(request))
+        except Exception:
             return Response(
-                {'error': 'You do not have permission to list all faculty.'},
+                {"error": "User not logged in"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if project.user.register_no != user["register_no"]:
+            return Response(
+                {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        role_filter = request.query_params.get('role', 'faculty')
-        users = User.objects.filter(role=role_filter).order_by('register_no')
-
-        results = []
-        for u in users:
-            detail = _build_faculty_detail(u)
-            results.append({
-                'user_id':      u.id,
-                'register_no':  u.register_no,
-                'username':     u.username,
-                'email':        u.email,
-                'total_points': detail['total_points'],
-            })
-
-        return Response({'count': len(results), 'faculty': results}, status=status.HTTP_200_OK)
-
-    # ------------------------------------------------------------------ #
-    # LEADERBOARD  – all faculty ranked by points, highest first
-    # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='leaderboard', methods=['get'])
-    def leaderboard(self, request):
-        """
-        Ranks every faculty member by total approved points, descending.
-        ?role=faculty (default) — pass ?role=all to include every role.
-        Dense ranking: ties share a rank, next distinct score continues at
-        rank+1 with no gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
-        """
-        jwt_payload = _get_authenticated_user(request)
-        if not jwt_payload:
-            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
-            return Response(
-                {'error': 'You do not have permission to view the leaderboard.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        role_filter = request.query_params.get('role', 'faculty')
-        users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
-
-        rows = []
-        for u in users:
-            detail = _build_faculty_detail(u)
-            rows.append({
-                'user_id':      u.id,
-                'register_no':  u.register_no,
-                'username':     u.username,
-                'email':        u.email,
-                'role':         u.role,
-                'total_points': detail['total_points'],
-            })
-
-        # Highest points first; stable secondary sort by username for a
-        # deterministic order among exact ties.
-        rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
-
-        ranked_rows = _assign_ranks(rows)
-
+        project.delete()
         return Response(
-            {'count': len(ranked_rows), 'leaderboard': ranked_rows},
+            {"message": "Deleted successfully"},
             status=status.HTTP_200_OK,
         )
+
+    # ------------------------------------------------------------------ #
+    # PENDING LIST (HOD only)  GET /funded-projects/requests/
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path="requests", methods=["get"])
+    def pending_list(self, request):
+        projects = FundedProject.objects.filter(approval_status="pending")
+        serializer = FundedProjectSerializer(projects, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

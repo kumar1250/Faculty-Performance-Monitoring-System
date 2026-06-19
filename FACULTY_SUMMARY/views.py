@@ -1,32 +1,68 @@
+from django.db.models import Sum
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.models import User
+from accounts.serializers import UserSerializer
 from accounts.token_jwt import decode_token, get_token_from_request
 from accounts.permissions import IsAuthenticated, IsHOD, IsPrincipal, IsDean
 
-# ── per-app model imports ──────────────────────────────────────────────────────
+# ── per-app model + serializer imports ───────────────────────────────────────
 from BOOK_PUBLICATIONS.models import BookPublication
+from BOOK_PUBLICATIONS.serializers import BookPublicationSerializer
+
 from CERTIFICATE_COURSES_DONE.models import Course
+from CERTIFICATE_COURSES_DONE.serializers import CourseSerializer
+
 from CONFERENCE_PUBLICATIONS.models import Publication
+from CONFERENCE_PUBLICATIONS.serializers import PublicationSerializer
+
 from CONSULTANCY.models import Consultancy
+from CONSULTANCY.serializers import ConsultancySerializer
+
 from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ATTENDED.models import FDPs_Attended
+from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ATTENDED.serializers import FDPsAttendedSerializer
+
 from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.models import FDPs_Organized
+from FDPs_SUCH_AS_WORKSHOPS_CONFERENCES_SEMINARS_etc_ORGANIZED.serializers import FDPsOrganizedSerializer
+
 from FUNDED_PROJECTS.models import FundedProject
+from FUNDED_PROJECTS.serializers import FundedProjectSerializer
+
 from JOURNAL_PUBLICATIONS.models import JournalPublication
+from JOURNAL_PUBLICATIONS.serializers import JournalPublicationSerializer
+
 from LEARNING_MATERIAL.models import SubjectContribution
+from LEARNING_MATERIAL.serializers import SubjectContributionSerializer
+
 from MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.models import ProfessionalMembership
+from MEMBERSHIPS_WITH_PROFESSIONAL_BODIES.serializers import ProfessionalMembershipSerializer
+
 from PATENTS.models import Patent
+from PATENTS.serializers import PatentSerializer
+
 from RESEARCH_GUIDANCE.models import ResearchGuidance
+from RESEARCH_GUIDANCE.serializers import ResearchGuidanceSerializer
+
 from SESSIONS_AND_DELIVERING_TALKS_LECTURES.models import ChairingSession
+from SESSIONS_AND_DELIVERING_TALKS_LECTURES.serializers import ChairingSessionSerializer
+
 from STUDENT_COUNSELLING_MENTORING.models import StudentCounselling
+from STUDENT_COUNSELLING_MENTORING.serializers import StudentCounsellingSerializer
+
 from STUDENT_PROJECT_WORKS_UNDERTAKEN.models import StudentProjectWork
+from STUDENT_PROJECT_WORKS_UNDERTAKEN.serializers import StudentProjectWorkSerializer
+
 from THEORY_COURSES_HANDLED.models import StudentFeedbackPerformance
+from THEORY_COURSES_HANDLED.serializers import StudentFeedbackPerformanceSerializer
 
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+PRIVILEGED_ROLES = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _get_authenticated_user(request):
     """Return the decoded JWT payload or None."""
@@ -37,16 +73,13 @@ def _get_authenticated_user(request):
 
 
 def _approved_points_sum(queryset):
-    """Sum the `points` field of approved records only."""
-    from django.db.models import Sum
     result = queryset.filter(approval_status='approved').aggregate(total=Sum('points'))
-    return result['total'] or 0.0
+    return result['total'] or 0
 
 
 def _module_summary_no_approval(label, queryset):
     """For models without an approval_status field — count all records and sum points."""
-    from django.db.models import Sum
-    pts = queryset.aggregate(total=Sum('points'))['total'] or 0.0
+    pts = queryset.aggregate(total=Sum('points'))['total'] or 0
     return {
         'module':   label,
         'total':    queryset.count(),
@@ -63,8 +96,7 @@ def _module_summary(label, queryset):
     pending_qs  = queryset.filter(approval_status='pending')
     rejected_qs = queryset.filter(approval_status='rejected')
 
-    from django.db.models import Sum
-    pts = approved_qs.aggregate(total=Sum('points'))['total'] or 0.0
+    pts = approved_qs.aggregate(total=Sum('points'))['total'] or 0
 
     return {
         'module':   label,
@@ -76,118 +108,197 @@ def _module_summary(label, queryset):
     }
 
 
-def _build_faculty_detail(user_obj):
-    """
-    Build the full module breakdown + total_points for a single User instance.
-    Uses related_name / reverse FK queries for every app.
-    """
-    uid = user_obj.id
+# Config used by both the lightweight summary and the full-detail builders.
+# (label, queryset_fn(user_obj), serializer_class, has_approval_status)
+def _module_config(user_obj):
+    return [
+        ("Book Publications",
+         BookPublication.objects.filter(user=user_obj), BookPublicationSerializer, True),
 
-    modules = [
-        _module_summary("Book Publications",
-                        BookPublication.objects.filter(user=user_obj)),
+        ("Certificate Courses Done",
+         Course.objects.filter(user=user_obj), CourseSerializer, False),
 
-        _module_summary("Certificate Courses Done",
-                        Course.objects.filter(user=user_obj)),
+        ("Conference Publications",
+         Publication.objects.filter(user=user_obj), PublicationSerializer, True),
 
-        _module_summary("Conference Publications",
-                        Publication.objects.filter(user=user_obj)),
+        ("Consultancy",
+         Consultancy.objects.filter(user=user_obj), ConsultancySerializer, True),
 
-        _module_summary("Consultancy",
-                        Consultancy.objects.filter(user=user_obj)),
+        ("FDPs Attended",
+         FDPs_Attended.objects.filter(user=user_obj), FDPsAttendedSerializer, True),
 
-        _module_summary("FDPs Attended",
-                        FDPs_Attended.objects.filter(user=user_obj)),
+        ("FDPs Organized",
+         FDPs_Organized.objects.filter(user=user_obj), FDPsOrganizedSerializer, True),
 
-        _module_summary("FDPs Organized",
-                        FDPs_Organized.objects.filter(user=user_obj)),
+        ("Funded Projects",
+         FundedProject.objects.filter(user=user_obj), FundedProjectSerializer, True),
 
-        _module_summary("Funded Projects",
-                        FundedProject.objects.filter(user=user_obj)),
+        ("Journal Publications",
+         JournalPublication.objects.filter(user=user_obj), JournalPublicationSerializer, True),
 
-        _module_summary("Journal Publications",
-                        JournalPublication.objects.filter(user=user_obj)),
+        ("Learning Material",
+         SubjectContribution.objects.filter(user=user_obj), SubjectContributionSerializer, False),
 
-        _module_summary("Learning Material",
-                        SubjectContribution.objects.filter(user=user_obj)),
+        ("Memberships with Professional Bodies",
+         ProfessionalMembership.objects.filter(user=user_obj), ProfessionalMembershipSerializer, False),
 
-        _module_summary("Memberships with Professional Bodies",
-                        ProfessionalMembership.objects.filter(user=user_obj)),
+        ("Patents",
+         Patent.objects.filter(user=user_obj), PatentSerializer, True),
 
-        _module_summary("Patents",
-                        Patent.objects.filter(user=user_obj)),
+        ("Research Guidance",
+         ResearchGuidance.objects.filter(user=user_obj), ResearchGuidanceSerializer, True),
 
-        _module_summary("Research Guidance",
-                        ResearchGuidance.objects.filter(user=user_obj)),
-
-        _module_summary("Sessions & Delivering Talks/Lectures",
-                        ChairingSession.objects.filter(user=user_obj)),
+        ("Sessions & Delivering Talks/Lectures",
+         ChairingSession.objects.filter(user=user_obj), ChairingSessionSerializer, True),
 
         # StudentCounselling uses 'faculty' FK instead of 'user'
-        _module_summary("Student Counselling / Mentoring",
-                        StudentCounselling.objects.filter(faculty=user_obj)),
+        ("Student Counselling / Mentoring",
+         StudentCounselling.objects.filter(faculty=user_obj), StudentCounsellingSerializer, False),
 
-        _module_summary("Student Project Works",
-                        StudentProjectWork.objects.filter(user=user_obj)),
+        ("Student Project Works",
+         StudentProjectWork.objects.filter(user=user_obj), StudentProjectWorkSerializer, True),
 
-        _module_summary_no_approval("Theory Courses Handled",
-                                    StudentFeedbackPerformance.objects.filter(user=user_obj)),
+        ("Theory Courses Handled",
+         StudentFeedbackPerformance.objects.filter(user=user_obj), StudentFeedbackPerformanceSerializer, False),
     ]
+
+
+def _build_faculty_detail(user_obj):
+    """Lightweight version — counts + points only (used by existing endpoints)."""
+    modules = []
+    for label, qs, _serializer_cls, has_approval in _module_config(user_obj):
+        if has_approval:
+            modules.append(_module_summary(label, qs))
+        else:
+            modules.append(_module_summary_no_approval(label, qs))
 
     total_points = sum(m['points'] for m in modules)
 
     return {
-        'user_id':     user_obj.id,
-        'register_no': user_obj.register_no,
-        'username':    user_obj.username,
-        'email':       user_obj.email,
-        'role':        user_obj.role,
-        'modules':     modules,
+        'user_id':      user_obj.id,
+        'register_no':  user_obj.register_no,
+        'username':     user_obj.username,
+        'email':        user_obj.email,
+        'role':         user_obj.role,
+        'modules':      modules,
         'total_points': total_points,
     }
 
 
-# ── ViewSet ────────────────────────────────────────────────────────────────────
+def _build_faculty_full_detail(user_obj, request):
+    """
+    Full version — every record's complete field data for every module,
+    plus the same counts/points summary, plus total points.
+    """
+    modules = []
+    for label, qs, serializer_cls, has_approval in _module_config(user_obj):
+        records = serializer_cls(qs, many=True, context={'request': request}).data
+
+        if has_approval:
+            summary = _module_summary(label, qs)
+        else:
+            summary = _module_summary_no_approval(label, qs)
+
+        modules.append({
+            'module':   label,
+            'total':    summary['total'],
+            'approved': summary['approved'],
+            'pending':  summary['pending'],
+            'rejected': summary['rejected'],
+            'points':   summary['points'],
+            'records':  records,   # <-- every field of every record in this module
+        })
+
+    total_points = sum(m['points'] for m in modules)
+
+    return {
+        'user_id':      user_obj.id,
+        'register_no':  user_obj.register_no,
+        'username':     user_obj.username,
+        'email':        user_obj.email,
+        'role':         user_obj.role,
+        'modules':      modules,
+        'total_points': total_points,
+    }
+
+
+def _assign_ranks(rows):
+    """
+    Dense ranking: equal points share the same rank, and the next distinct
+    score simply continues at (previous_rank + 1) — no gaps.
+    e.g. points [90, 80, 80, 70] -> ranks [1, 2, 2, 3]
+    """
+    ranked = []
+    previous_points = None
+    current_rank = 0
+    for row in rows:
+        if row['total_points'] != previous_points:
+            current_rank += 1
+            previous_points = row['total_points']
+        row_with_rank = {'rank': current_rank, **row}
+        ranked.append(row_with_rank)
+    return ranked
+
+
+def _rank_of_user(ranked_rows, user_id):
+    """Find a specific user's rank/row inside an already-ranked leaderboard list."""
+    for row in ranked_rows:
+        if row['user_id'] == user_id:
+            return row
+    return None
+
+
+# ── ViewSet ───────────────────────────────────────────────────────────────────
 
 class FacultySummaryViewSet(ViewSet):
     """
     Endpoints
     ---------
     GET  /summary/faculty-summary/my-summary/
-        → Own module details + total points (any authenticated user).
+        -> Own module details (counts + points) for the logged-in user.
 
     GET  /summary/faculty-summary/by-user/?user_id=<id>
-        → Module details for a specific user_id  (HOD / Principal / Dean).
+        -> Module details (counts + points) for a specific user_id.
 
     GET  /summary/faculty-summary/by-register/?register_no=<register_no>
-        → Module details looked up by register_no  (HOD / Principal / Dean).
+        -> Module details (counts + points) looked up by register_no.
+
+    GET  /summary/faculty-summary/by-register-full/?register_no=<register_no>
+        -> EVERY full record (all fields) for every module, for one faculty,
+           looked up by register_no. This is the "enter register number,
+           get everything" endpoint.
+
+    GET  /summary/faculty-summary/dashboard/?register_no=<register_no>&role=faculty
+        -> The all-in-one view: same full module breakdown as by-register-full,
+           PLUS that faculty's live rank among peers and points behind #1.
+           This is the one to use for a single faculty's dashboard screen.
 
     GET  /summary/faculty-summary/total-points/
-        → Own total approved points only (any authenticated user).
+        -> Own total approved points only.
 
     GET  /summary/faculty-summary/total-points-by-user/?user_id=<id>
-        → Total approved points for a specific user_id  (HOD / Principal / Dean).
+        -> Total approved points for a specific user_id.
 
     GET  /summary/faculty-summary/all-faculty/
-        → List of all faculty with their total points  (HOD / Principal / Dean).
+        -> List of all faculty with their total points (unranked, register_no order).
+
+    GET  /summary/faculty-summary/leaderboard/?role=faculty
+        -> All faculty ranked by total points, HIGHEST FIRST, with rank numbers.
+           Dense ranking: ties share a rank, next score continues +1 with no
+           gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
+           Optional ?role= filter (default 'faculty', pass 'all' for everyone).
     """
 
     def get_permissions(self):
-        privileged_actions = (
-            'by_user', 'by_register',
-            'total_points_by_user', 'all_faculty',
-        )
-        if self.action in privileged_actions:
-            # HOD, Principal, or Dean can view other faculty
-            return [IsAuthenticated()]   # tighten to IsHOD | IsPrincipal if needed
+        # Tighten these to IsHOD / IsPrincipal / IsDean if you want to lock
+        # down who can see other people's data.
         return [IsAuthenticated()]
 
     # ------------------------------------------------------------------ #
-    # MY SUMMARY  –  own modules                                          #
+    # MY SUMMARY
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='my-summary', methods=['get'])
     def my_summary(self, request):
-        """Return the calling faculty's full module breakdown."""
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -200,18 +311,15 @@ class FacultySummaryViewSet(ViewSet):
         return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # BY USER ID  –  privileged lookup                                    #
+    # BY USER ID
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='by-user', methods=['get'])
     def by_user(self, request):
-        """Return module details for any user_id (HOD / Principal / Dean)."""
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Only HOD, principal, or dean may query other users
-        allowed_roles = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
-        if jwt_payload.get('role') not in allowed_roles:
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
             return Response(
                 {'error': 'You do not have permission to view other faculty details.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -229,17 +337,15 @@ class FacultySummaryViewSet(ViewSet):
         return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # BY REGISTER NO  –  privileged lookup                                #
+    # BY REGISTER NO (counts + points only)
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='by-register', methods=['get'])
     def by_register(self, request):
-        """Return module details for a faculty identified by register_no."""
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        allowed_roles = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
-        if jwt_payload.get('role') not in allowed_roles:
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
             return Response(
                 {'error': 'You do not have permission to view other faculty details.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -257,11 +363,41 @@ class FacultySummaryViewSet(ViewSet):
         return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # TOTAL POINTS  –  own                                                #
+    # BY REGISTER NO — FULL DETAIL  (every module, every field)
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path='by-register-full', methods=['get'])
+    def by_register_full(self, request):
+        """
+        Enter a register_no, get back every module the faculty has any
+        record in, with every field of every record, plus per-module and
+        overall point totals.
+        """
+        jwt_payload = _get_authenticated_user(request)
+        if not jwt_payload:
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+            return Response(
+                {'error': 'You do not have permission to view other faculty details.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        register_no = request.query_params.get('register_no')
+        if not register_no:
+            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_obj = User.objects.get(register_no=register_no)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(_build_faculty_full_detail(user_obj, request), status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # TOTAL POINTS — own
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='total-points', methods=['get'])
     def total_points(self, request):
-        """Return the calling faculty's total approved points."""
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -283,17 +419,15 @@ class FacultySummaryViewSet(ViewSet):
         )
 
     # ------------------------------------------------------------------ #
-    # TOTAL POINTS BY USER ID  –  privileged                             #
+    # TOTAL POINTS BY USER ID
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='total-points-by-user', methods=['get'])
     def total_points_by_user(self, request):
-        """Return total approved points for a specific user_id."""
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        allowed_roles = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
-        if jwt_payload.get('role') not in allowed_roles:
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
             return Response(
                 {'error': 'You do not have permission to view other faculty details.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -320,20 +454,76 @@ class FacultySummaryViewSet(ViewSet):
         )
 
     # ------------------------------------------------------------------ #
-    # ALL FACULTY  –  list with points                                    #
+    # DASHBOARD  – full module detail + live rank, in one call
     # ------------------------------------------------------------------ #
-    @action(detail=False, url_path='all-faculty', methods=['get'])
-    def all_faculty(self, request):
+    @action(detail=False, url_path='dashboard', methods=['get'])
+    def dashboard(self, request):
         """
-        Return a list of all faculty members with their total approved points.
-        Optionally filter by ?role=faculty (or any role).
+        The all-in-one screen: enter a register_no and get back
+          - every module, every record, every field (same as by-register-full)
+          - that faculty's current rank among their peers (dense rank: 1,2,2,3)
+          - how many points separate them from the #1 spot
+
+        GET /summary/faculty-summary/dashboard/?register_no=21A1234&role=faculty
         """
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        allowed_roles = ('hod', 'principal', 'dean', 'committee_coordinator', 'department_incharge')
-        if jwt_payload.get('role') not in allowed_roles:
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+            return Response(
+                {'error': 'You do not have permission to view other faculty details.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        register_no = request.query_params.get('register_no')
+        if not register_no:
+            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_obj = User.objects.get(register_no=register_no)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Full per-module breakdown for this one user.
+        full_detail = _build_faculty_full_detail(user_obj, request)
+
+        # Rank that user against their peer group.
+        role_filter = request.query_params.get('role', user_obj.role)
+        peers = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
+
+        rows = []
+        for u in peers:
+            detail = _build_faculty_detail(u)
+            rows.append({
+                'user_id':      u.id,
+                'register_no':  u.register_no,
+                'username':     u.username,
+                'total_points': detail['total_points'],
+            })
+        rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
+        ranked_rows = _assign_ranks(rows)
+
+        my_rank_row = _rank_of_user(ranked_rows, user_obj.id)
+        top_score = ranked_rows[0]['total_points'] if ranked_rows else 0
+        points_behind_first = max(top_score - full_detail['total_points'], 0)
+
+        full_detail['rank'] = my_rank_row['rank'] if my_rank_row else None
+        full_detail['peer_group_size'] = len(ranked_rows)
+        full_detail['points_behind_first'] = points_behind_first
+
+        return Response(full_detail, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # ALL FACULTY  – list with points (unranked, register_no order)
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path='all-faculty', methods=['get'])
+    def all_faculty(self, request):
+        jwt_payload = _get_authenticated_user(request)
+        if not jwt_payload:
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
             return Response(
                 {'error': 'You do not have permission to list all faculty.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -354,3 +544,50 @@ class FacultySummaryViewSet(ViewSet):
             })
 
         return Response({'count': len(results), 'faculty': results}, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # LEADERBOARD  – all faculty ranked by points, highest first
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path='leaderboard', methods=['get'])
+    def leaderboard(self, request):
+        """
+        Ranks every faculty member by total approved points, descending.
+        ?role=faculty (default) — pass ?role=all to include every role.
+        Dense ranking: ties share a rank, next distinct score continues at
+        rank+1 with no gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
+        """
+        jwt_payload = _get_authenticated_user(request)
+        if not jwt_payload:
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+            return Response(
+                {'error': 'You do not have permission to view the leaderboard.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        role_filter = request.query_params.get('role', 'faculty')
+        users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
+
+        rows = []
+        for u in users:
+            detail = _build_faculty_detail(u)
+            rows.append({
+                'user_id':      u.id,
+                'register_no':  u.register_no,
+                'username':     u.username,
+                'email':        u.email,
+                'role':         u.role,
+                'total_points': detail['total_points'],
+            })
+
+        # Highest points first; stable secondary sort by username for a
+        # deterministic order among exact ties.
+        rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
+
+        ranked_rows = _assign_ranks(rows)
+
+        return Response(
+            {'count': len(ranked_rows), 'leaderboard': ranked_rows},
+            status=status.HTTP_200_OK,
+        )
