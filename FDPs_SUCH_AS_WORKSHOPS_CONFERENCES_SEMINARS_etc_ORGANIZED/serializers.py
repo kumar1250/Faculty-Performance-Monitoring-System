@@ -46,5 +46,5 @@ class CreateFDPsOrganizedSerializer(serializers.ModelSerializer):
             'level',
             'duration',
             'capacity',
-            'Certificate_file'
+            'certificate_file'
         ]
