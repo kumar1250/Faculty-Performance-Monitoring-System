@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import Patent
+from accounts.serializers import UserSerializer
 
 
 class PatentSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 
@@ -19,6 +21,7 @@ class PatentSerializer(serializers.ModelSerializer):
 
 
 class CreatePatentSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 

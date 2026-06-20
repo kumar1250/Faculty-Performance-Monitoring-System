@@ -1,14 +1,17 @@
 from rest_framework import serializers
 from .models import ResearchGuidance
+from accounts.serializers import UserSerializer
 
 
 class ResearchGuidanceSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = ResearchGuidance
         fields = '__all__'
 
 
 class CreateResearchGuidanceSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = ResearchGuidance
         fields = [

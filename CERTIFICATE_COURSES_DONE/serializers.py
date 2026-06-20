@@ -1,8 +1,8 @@
 from rest_framework import serializers
-
+from accounts.serializers import UserSerializer
 from .models import Course
 class CourseSerializer(serializers.ModelSerializer):
-
+    user = UserSerializer(read_only=True)
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 
@@ -21,6 +21,7 @@ class CourseSerializer(serializers.ModelSerializer):
 
 
 class CreateCourseSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif','webp']
 

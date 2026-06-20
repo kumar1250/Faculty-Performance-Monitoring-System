@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import SubjectContribution
+from accounts.serializers import UserSerializer
 
 
 class SubjectContributionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = SubjectContribution
@@ -10,6 +12,7 @@ class SubjectContributionSerializer(serializers.ModelSerializer):
 
 
 class CreateSubjectContributionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = SubjectContribution

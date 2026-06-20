@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import StudentCounselling
+from accounts.serializers import UserSerializer
 
 
 class StudentCounsellingSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = StudentCounselling
@@ -10,6 +12,7 @@ class StudentCounsellingSerializer(serializers.ModelSerializer):
 
 
 class CreateStudentCounsellingSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = StudentCounselling

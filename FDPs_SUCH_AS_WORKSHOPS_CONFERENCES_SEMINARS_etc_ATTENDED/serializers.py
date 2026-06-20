@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from .models import FDPs_Attended
-
+from accounts.serializers import UserSerializer
 
 class FDPsAttendedSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:
@@ -23,6 +24,7 @@ class FDPsAttendedSerializer(serializers.ModelSerializer):
 
 
 class CreateFDPsAttendedSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:
