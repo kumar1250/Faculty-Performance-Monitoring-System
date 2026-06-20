@@ -249,21 +249,25 @@ class ProfileViewSet(viewsets.ViewSet):
             region_name=settings.AWS_S3_REGION_NAME,
         )
 
-    @action(detail=False, methods=['get'], url_path='me')
+    @action(detail=False, methods=['get'], url_path='me', permission_classes=[IsAuthenticated])
     def get_my_profile(self, request):
         user_data = decode_token(get_token_from_request(request))
-        user = User.objects.get(register_no=user_data["register_no"])
+        if not user_data:
+            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            user = User.objects.get(register_no=user_data["register_no"])
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
         profile, _ = Profile.objects.get_or_create(user=user)
         
-        # Serialize existing data
         serializer = ProfileSerializer(profile)
         data = serializer.data
         
-        # Add presigned URL if image exists
         if profile.profile_image:
             s3 = self.get_s3_client()
-            # Assuming your custom storage path is 'profile_pics/'
-            key = f"profile_pics/{profile.profile_image.name}"
+            key = f"profile_image/{profile.profile_image.name}"
             url = s3.generate_presigned_url(
                 "get_object",
                 Params={
@@ -276,7 +280,7 @@ class ProfileViewSet(viewsets.ViewSet):
             
         return Response(data)
 
-    @action(detail=False, methods=['put'], url_path='update')
+    @action(detail=False, methods=['put'], url_path='update', permission_classes=[IsAuthenticated])
     def update_profile(self, request):
         user_data = decode_token(get_token_from_request(request))
         if not user_data:
@@ -287,22 +291,12 @@ class ProfileViewSet(viewsets.ViewSet):
         except User.DoesNotExist:
             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Safety net: get_or_create instead of assuming user.profile exists
+        # Use get_or_create instead of user.profile so a missing Profile row
+        # doesn't raise Profile.RelatedObjectDoesNotExist and crash with a 500.
         profile, _ = Profile.objects.get_or_create(user=user)
 
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
+        if serializer.is_valid():
             serializer.save()
-        except Exception as e:
-            # Surface the real error instead of a bare 500 with no body.
-            # TODO: replace with proper logging once root cause is confirmed,
-            # and stop returning str(e) to the client in production.
-            return Response(
-                {'error': f'Failed to save profile: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
