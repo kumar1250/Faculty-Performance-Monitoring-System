@@ -256,7 +256,11 @@ class ProfileViewSet(viewsets.ViewSet):
 
         if profile.profile_image:
             s3 = self.get_s3_client()
-            key = f"profile_pics/{profile.profile_image.name}"
+            # Must match Profile_image storage's `location = "profile_image"`
+            # in core/storage.py — that's the actual prefix S3Storage uses
+            # when uploading, so the presigned URL has to use the same key
+            # or it points at a file that was never written.
+            key = f"profile_image/{profile.profile_image.name}"
             url = s3.generate_presigned_url(
                 "get_object",
                 Params={
