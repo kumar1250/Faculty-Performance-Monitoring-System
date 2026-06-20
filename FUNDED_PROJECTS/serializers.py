@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import FundedProject
+from accounts.serializers import UserSerializer
 
 
 class FundedProjectSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = FundedProject
@@ -10,6 +12,7 @@ class FundedProjectSerializer(serializers.ModelSerializer):
 
 
 class CreateFundedProjectSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = FundedProject

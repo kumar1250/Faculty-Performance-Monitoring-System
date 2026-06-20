@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from .models import FDPs_Organized
-
+from accounts.serializers import UserSerializer
 
 class FDPsOrganizedSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_CertificateError_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
@@ -22,6 +23,7 @@ class FDPsOrganizedSerializer(serializers.ModelSerializer):
 
 
 class CreateFDPsOrganizedSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_CertificateError_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']

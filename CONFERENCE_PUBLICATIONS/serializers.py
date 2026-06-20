@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from .models import Publication
-
+from accounts.serializers import UserSerializer
 
 class PublicationSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:
@@ -23,6 +24,7 @@ class PublicationSerializer(serializers.ModelSerializer):
 
 
 class CreatePublicationSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:

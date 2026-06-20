@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import StudentProjectWork
+from accounts.serializers import UserSerializer
 
 
 class StudentProjectWorkSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
@@ -22,6 +24,7 @@ class StudentProjectWorkSerializer(serializers.ModelSerializer):
 
 
 class CreateStudentProjectWorkSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']

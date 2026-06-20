@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import ChairingSession
+from accounts.serializers import UserSerializer
 
 
 class ChairingSessionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:
@@ -22,6 +24,7 @@ class ChairingSessionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CreateChairingSessionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
 
     def validate_certificate_file(self, value):
         if value:
