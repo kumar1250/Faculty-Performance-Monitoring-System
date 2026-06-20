@@ -367,7 +367,7 @@ class BookPublicationViewSet(ViewSet):
             region_name=settings.AWS_S3_REGION_NAME,
         )
 
-        key = f"book_publications/{publication.certificate_file.name}"
+        key = publication.certificate_file.name
 
         url = s3.generate_presigned_url(
             "get_object",
