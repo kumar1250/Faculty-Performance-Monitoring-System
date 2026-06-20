@@ -5,9 +5,12 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.models import User
+from accounts.models import Profile
 from accounts.serializers import UserSerializer
 from accounts.token_jwt import decode_token, get_token_from_request
 from accounts.permissions import IsAuthenticated, IsHOD, IsPrincipal, IsDean
+import boto3
+from django.conf import settings
 
 # ── per-app model + serializer imports ───────────────────────────────────────
 from BOOK_PUBLICATIONS.models import BookPublication
@@ -252,13 +255,55 @@ def _rank_of_user(ranked_rows, user_id):
     return None
 
 
-def _serialize_basic_user(u):
+def _get_s3_client():
+    return boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME,
+    )
+
+
+def _profile_image_urls_for_users(users):
+    """
+    Bulk-build {user_id: presigned_profile_image_url} for a list/queryset of
+    User objects in ONE query instead of one Profile lookup per row — search
+    results can return up to 25 rows and the leaderboard/all-faculty list can
+    return every faculty member, so this avoids an N+1 query (and N S3 calls
+    only happen for users who actually have a photo uploaded).
+    Mirrors the key format used in accounts/views.py ProfileViewSet so the
+    presigned URL always points at the same S3 prefix the file was uploaded to.
+    """
+    user_ids = [u.id for u in users]
+    profiles = Profile.objects.filter(user_id__in=user_ids).exclude(profile_image='')
+    if not profiles:
+        return {}
+
+    s3 = _get_s3_client()
+    urls = {}
+    for profile in profiles:
+        if not profile.profile_image:
+            continue
+        key = f"profile_image/{profile.profile_image.name}"
+        urls[profile.user_id] = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                "Key": key,
+            },
+            ExpiresIn=3600,
+        )
+    return urls
+
+
+def _serialize_basic_user(u, image_url=None):
     return {
-        'user_id':     u.id,
-        'register_no': u.register_no,
-        'username':    u.username,
-        'email':       u.email,
-        'role':        u.role,
+        'user_id':           u.id,
+        'register_no':       u.register_no,
+        'username':          u.username,
+        'email':             u.email,
+        'role':              u.role,
+        'profile_image_url': image_url,
     }
 
 
@@ -454,8 +499,10 @@ class FacultySummaryViewSet(ViewSet):
             matches = matches.filter(role=role_filter)
 
         matches = matches.order_by('register_no')[:25]   # cap results for a search box
+        matches = list(matches)
 
-        results = [_serialize_basic_user(u) for u in matches]
+        image_urls = _profile_image_urls_for_users(matches)
+        results = [_serialize_basic_user(u, image_urls.get(u.id)) for u in matches]
         return Response({'count': len(results), 'results': results}, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
@@ -577,6 +624,7 @@ class FacultySummaryViewSet(ViewSet):
         full_detail['rank'] = my_rank_row['rank'] if my_rank_row else None
         full_detail['peer_group_size'] = len(ranked_rows)
         full_detail['points_behind_first'] = points_behind_first
+        full_detail['profile_image_url'] = _profile_image_urls_for_users([user_obj]).get(user_obj.id)
 
         return Response(full_detail, status=status.HTTP_200_OK)
 
@@ -598,17 +646,20 @@ class FacultySummaryViewSet(ViewSet):
         # Defaults to ALL roles now; pass ?role=faculty (or hod/dean/etc.) to narrow.
         role_filter = request.query_params.get('role', 'all')
         users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
-        users = users.order_by('register_no')
+        users = list(users.order_by('register_no'))
+
+        image_urls = _profile_image_urls_for_users(users)
 
         results = []
         for u in users:
             detail = _build_faculty_detail(u)
             results.append({
-                'user_id':      u.id,
-                'register_no':  u.register_no,
-                'username':     u.username,
-                'email':        u.email,
-                'total_points': detail['total_points'],
+                'user_id':           u.id,
+                'register_no':       u.register_no,
+                'username':          u.username,
+                'email':             u.email,
+                'total_points':      detail['total_points'],
+                'profile_image_url': image_urls.get(u.id),
             })
 
         return Response({'count': len(results), 'faculty': results}, status=status.HTTP_200_OK)
@@ -636,17 +687,21 @@ class FacultySummaryViewSet(ViewSet):
 
         role_filter = request.query_params.get('role', 'all')
         users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
+        users = list(users)
+
+        image_urls = _profile_image_urls_for_users(users)
 
         rows = []
         for u in users:
             detail = _build_faculty_detail(u)
             rows.append({
-                'user_id':      u.id,
-                'register_no':  u.register_no,
-                'username':     u.username,
-                'email':        u.email,
-                'role':         u.role,
-                'total_points': detail['total_points'],
+                'user_id':           u.id,
+                'register_no':       u.register_no,
+                'username':          u.username,
+                'email':             u.email,
+                'role':              u.role,
+                'total_points':      detail['total_points'],
+                'profile_image_url': image_urls.get(u.id),
             })
 
         # Highest points first; stable secondary sort by username for a
