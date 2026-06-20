@@ -1,4 +1,3 @@
-
 # Create your views here.
 from urllib import request
 
@@ -249,6 +248,27 @@ class ProfileViewSet(viewsets.ViewSet):
             region_name=settings.AWS_S3_REGION_NAME,
         )
 
+    def _serialize_with_image_url(self, profile):
+        """Shared by get_my_profile and get_profile_by_register_no so the
+        presigned-URL logic only lives in one place."""
+        serializer = ProfileSerializer(profile)
+        data = serializer.data
+
+        if profile.profile_image:
+            s3 = self.get_s3_client()
+            key = f"profile_pics/{profile.profile_image.name}"
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                    "Key": key,
+                },
+                ExpiresIn=3600,
+            )
+            data['profile_image_url'] = url
+
+        return data
+
     @action(detail=False, methods=['get'], url_path='me', permission_classes=[IsAuthenticated])
     def get_my_profile(self, request):
         user_data = decode_token(get_token_from_request(request))
@@ -261,24 +281,20 @@ class ProfileViewSet(viewsets.ViewSet):
             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         profile, _ = Profile.objects.get_or_create(user=user)
-        
-        serializer = ProfileSerializer(profile)
-        data = serializer.data
-        
-        if profile.profile_image:
-            s3 = self.get_s3_client()
-            key = f"profile_image/{profile.profile_image.name}"
-            url = s3.generate_presigned_url(
-                "get_object",
-                Params={
-                    "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
-                    "Key": key,
-                },
-                ExpiresIn=3600,
-            )
-            data['profile_image_url'] = url
-            
-        return Response(data)
+        return Response(self._serialize_with_image_url(profile))
+
+    # Lets the Portfolio page show the profile header (avatar, headline,
+    # department, experience, bio) when viewing someone else's portfolio in
+    # read-only mode, e.g. /profile/:registerNo on the frontend.
+    @action(detail=False, methods=['get'], url_path='by-register/(?P<register_no>[^/.]+)', permission_classes=[IsAuthenticated])
+    def get_profile_by_register_no(self, request, register_no=None):
+        try:
+            user = User.objects.get(register_no=register_no)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return Response(self._serialize_with_image_url(profile))
 
     @action(detail=False, methods=['put'], url_path='update', permission_classes=[IsAuthenticated])
     def update_profile(self, request):
@@ -292,7 +308,8 @@ class ProfileViewSet(viewsets.ViewSet):
             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         # Use get_or_create instead of user.profile so a missing Profile row
-        # doesn't raise Profile.RelatedObjectDoesNotExist and crash with a 500.
+        # (e.g. never created for this user) doesn't raise
+        # Profile.RelatedObjectDoesNotExist and crash with a 500.
         profile, _ = Profile.objects.get_or_create(user=user)
 
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
