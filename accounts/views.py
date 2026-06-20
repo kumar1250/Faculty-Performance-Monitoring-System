@@ -279,11 +279,30 @@ class ProfileViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['put'], url_path='update')
     def update_profile(self, request):
         user_data = decode_token(get_token_from_request(request))
-        user = User.objects.get(register_no=user_data["register_no"])
-        profile = user.profile
-        
+        if not user_data:
+            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            user = User.objects.get(register_no=user_data["register_no"])
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Safety net: get_or_create instead of assuming user.profile exists
+        profile, _ = Profile.objects.get_or_create(user=user)
+
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
             serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            # Surface the real error instead of a bare 500 with no body.
+            # TODO: replace with proper logging once root cause is confirmed,
+            # and stop returning str(e) to the client in production.
+            return Response(
+                {'error': f'Failed to save profile: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
