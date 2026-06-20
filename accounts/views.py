@@ -12,6 +12,11 @@ from rest_framework import status
 from .models import User, BlacklistedToken, PasswordResetOTP
 from .serializers import (UserRegistrationSerializer, UserUpdateSerializer,ForgotPasswordSerializer, VerifyOTPSerializer,ResetPasswordSerializer)
 from .utils import send_otp_email
+from rest_framework import viewsets, status, permissions
+from .models import Profile
+from .serializers import ProfileSerializer
+import boto3
+from django.conf import settings
 
 
 class UserViewSet(ViewSet):
@@ -232,3 +237,53 @@ class UserViewSet(ViewSet):
         user.save()
 
         return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
+    
+    
+class ProfileViewSet(viewsets.ViewSet):
+    
+    def get_s3_client(self):
+        return boto3.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_S3_REGION_NAME,
+        )
+
+    @action(detail=False, methods=['get'], url_path='me')
+    def get_my_profile(self, request):
+        user_data = decode_token(get_token_from_request(request))
+        user = User.objects.get(register_no=user_data["register_no"])
+        profile, _ = Profile.objects.get_or_create(user=user)
+        
+        # Serialize existing data
+        serializer = ProfileSerializer(profile)
+        data = serializer.data
+        
+        # Add presigned URL if image exists
+        if profile.profile_image:
+            s3 = self.get_s3_client()
+            # Assuming your custom storage path is 'profile_pics/'
+            key = f"profile_pics/{profile.profile_image.name}"
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                    "Key": key,
+                },
+                ExpiresIn=3600,
+            )
+            data['profile_image_url'] = url
+            
+        return Response(data)
+
+    @action(detail=False, methods=['put'], url_path='update')
+    def update_profile(self, request):
+        user_data = decode_token(get_token_from_request(request))
+        user = User.objects.get(register_no=user_data["register_no"])
+        profile = user.profile
+        
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

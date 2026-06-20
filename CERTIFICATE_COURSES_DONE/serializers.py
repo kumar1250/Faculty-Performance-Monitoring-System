@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from accounts.serializers import UserSerializer
 from .models import Course
+
+
 class CourseSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     def validate_certificate_file(self, value):
@@ -37,3 +39,4 @@ class CreateCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = ['id','user', 'certificate_type', 'Course_name', 'certificate_file']
+        

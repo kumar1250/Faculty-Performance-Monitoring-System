@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import User
+from .models import Profile
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -29,3 +30,10 @@ class VerifyOTPSerializer(serializers.Serializer):
 class ResetPasswordSerializer(serializers.Serializer):
     reset_token = serializers.CharField()    # received from verify-otp step
     new_password = serializers.CharField(min_length=8)
+
+class ProfileSerializer(serializers.ModelSerializer):
+    username= UserRegistrationSerializer(read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = ['id', 'username', 'profile_image', 'headline', 'bio', 'department', 'experience_years']
