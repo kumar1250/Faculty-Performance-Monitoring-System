@@ -36,11 +36,13 @@ class StudentFeedbackPerformance(models.Model):
     cycle_1_feedback = models.CharField(
         max_length=20,
         choices=FEEDBACK_CHOICES,
+        default=''
     )
 
     cycle_2_feedback = models.CharField(
         max_length=20,
         choices=FEEDBACK_CHOICES,
+        default=''
     )
 
     exam_result = models.CharField(

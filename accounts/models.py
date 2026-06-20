@@ -4,7 +4,7 @@ import random
 import uuid
 from django.utils import timezone
 from datetime import timedelta
-
+from core.storage import Profile_image
 # Create your models here.
 
 class User(models.Model):
@@ -32,7 +32,19 @@ class User(models.Model):
     
     def __str__(self):
         return self.username
+
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    profile_image = models.ImageField(storage=Profile_image(), blank=True, null=True)
+    headline = models.CharField(max_length=255, blank=True, help_text="e.g., Assistant Professor at XYZ College")
+    bio = models.TextField(blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True)
+    experience_years = models.PositiveIntegerField(default=0, blank=True)
     
+    def __str__(self):
+        return f"{self.user.username}'s Profile"
+
+
 class BlacklistedToken(models.Model):
         token = models.TextField(unique=True)
         blacklisted_at = models.DateTimeField(auto_now_add=True)

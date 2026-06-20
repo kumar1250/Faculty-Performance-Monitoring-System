@@ -34,3 +34,6 @@ class JournalPublicationStorage(S3Storage):
     
 class Book_publication_Storage(S3Storage):
     location = "book_publications"
+
+class Profile_image(S3Storage):
+    location = "profile_image"
