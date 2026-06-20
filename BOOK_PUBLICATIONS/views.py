@@ -251,7 +251,11 @@ class BookPublicationViewSet(ViewSet):
             )
 
         status_value = request.data.get("status")
-        remarks      = request.data.get("remarks")
+        # Frontend sends { status, message } for every module's approve
+        # action — this one previously read "remarks" instead of "message",
+        # so rejection/approval notes from the Approval Inbox were silently
+        # dropped for Book Publications only.
+        remarks      = request.data.get("message")
 
         if status_value not in ("approved", "rejected"):
             return Response(
