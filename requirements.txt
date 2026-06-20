@@ -252,7 +252,6 @@ python-multipart==0.0.22
 python-pptx==1.0.2
 python-socketio==5.16.1
 pytz==2025.2
-pywin32==311
 PyYAML==6.0.3
 qrcode==8.2
 razorpay==2.0.0
