@@ -582,15 +582,17 @@ class FacultySummaryViewSet(ViewSet):
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
+        register_no = request.query_params.get('register_no')
+        if not register_no:
+            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Non-privileged users can only view their own dashboard.
+        is_privileged = jwt_payload.get('role') in PRIVILEGED_ROLES
+        if not is_privileged and jwt_payload.get('register_no') != register_no:
             return Response(
                 {'error': 'You do not have permission to view other faculty details.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        register_no = request.query_params.get('register_no')
-        if not register_no:
-            return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user_obj = User.objects.get(register_no=register_no)
@@ -678,12 +680,6 @@ class FacultySummaryViewSet(ViewSet):
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
-            return Response(
-                {'error': 'You do not have permission to view the leaderboard.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         role_filter = request.query_params.get('role', 'all')
         users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
