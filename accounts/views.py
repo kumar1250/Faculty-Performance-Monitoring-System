@@ -31,7 +31,7 @@ class UserViewSet(ViewSet):
             'hod': 8,
             'committee_coordinator': 7,
             'department_incharge': 6,
-            'faculty': 0,
+            'faculty': 5,
         }
             if serializer.data['role']in role_points:
                 user = User.objects.get(id=serializer.data['id'])
@@ -110,7 +110,7 @@ class UserViewSet(ViewSet):
                             'hod': 8,
                             'committee_coordinator': 7,
                             'department_incharge': 6,
-                            'faculty': 0,
+                            'faculty': 5,
                             }
                     if serializer.data['role'] in role_points:
                         user_to_update.save()

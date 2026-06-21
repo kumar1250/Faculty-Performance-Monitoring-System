@@ -478,11 +478,7 @@ class FacultySummaryViewSet(ViewSet):
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if jwt_payload.get('role') not in PRIVILEGED_ROLES:
-            return Response(
-                {'error': 'You do not have permission to search other users.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_privileged = jwt_payload.get('role') in PRIVILEGED_ROLES
 
         query = request.query_params.get('q', '').strip()
         if not query:
@@ -493,6 +489,10 @@ class FacultySummaryViewSet(ViewSet):
         matches = User.objects.filter(
             Q(register_no__icontains=query) | Q(username__icontains=query)
         )
+
+        # Non-privileged users can only find themselves
+        if not is_privileged:
+            matches = matches.filter(id=jwt_payload['user_id'])
 
         role_filter = request.query_params.get('role')
         if role_filter:
