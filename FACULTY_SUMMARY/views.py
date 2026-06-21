@@ -478,8 +478,6 @@ class FacultySummaryViewSet(ViewSet):
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        is_privileged = jwt_payload.get('role') in PRIVILEGED_ROLES
-
         query = request.query_params.get('q', '').strip()
         if not query:
             return Response({'error': 'q query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -489,10 +487,6 @@ class FacultySummaryViewSet(ViewSet):
         matches = User.objects.filter(
             Q(register_no__icontains=query) | Q(username__icontains=query)
         )
-
-        # Non-privileged users can only find themselves
-        if not is_privileged:
-            matches = matches.filter(id=jwt_payload['user_id'])
 
         role_filter = request.query_params.get('role')
         if role_filter:
@@ -585,14 +579,6 @@ class FacultySummaryViewSet(ViewSet):
         register_no = request.query_params.get('register_no')
         if not register_no:
             return Response({'error': 'register_no query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Non-privileged users can only view their own dashboard.
-        is_privileged = jwt_payload.get('role') in PRIVILEGED_ROLES
-        if not is_privileged and jwt_payload.get('register_no') != register_no:
-            return Response(
-                {'error': 'You do not have permission to view other faculty details.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         try:
             user_obj = User.objects.get(register_no=register_no)
