@@ -5,7 +5,7 @@ from .models import Profile
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'register_no', 'email', 'password', 'role',]
+        fields = ['id', 'username', 'register_no', 'email','department', 'password', 'role',]
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,7 +18,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['username','email','register_no', 'password','role']
+        fields = ['username','email','register_no','department', 'password','role']
         
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
