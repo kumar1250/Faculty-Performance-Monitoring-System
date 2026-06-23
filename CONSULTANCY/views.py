@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Consultancy
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from .serializers import ConsultancySerializer, CreateConsultancySerializer
 
 from accounts.models import User
@@ -20,7 +20,7 @@ class ConsultancyViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action == 'approve_consultancy':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
             permission_classes = [IsHOD]
         else:

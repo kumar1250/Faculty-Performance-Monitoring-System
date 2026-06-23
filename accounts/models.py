@@ -30,8 +30,8 @@ class User(models.Model):
     register_no = models.CharField(max_length=10, unique=True)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
-    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES)
-    role = models.CharField(max_length=50, choices=ROLE_CHOICES)
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES,null=True)
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES)+
     points=models.IntegerField(default=0,blank=True)
     
     

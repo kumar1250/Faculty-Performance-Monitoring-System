@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import BookPublication
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from .serializers import BookPublicationSerializer, CreateBookPublicationSerializer
 from accounts.models import User
 
@@ -48,7 +48,7 @@ class BookPublicationViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action in ("approve_publication", "pending_list"):
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]

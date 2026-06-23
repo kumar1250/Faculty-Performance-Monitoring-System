@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 
 from .models import ResearchGuidance
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from .serializers import ResearchGuidanceSerializer, CreateResearchGuidanceSerializer
 from accounts.models import User
 
@@ -72,7 +72,7 @@ class ResearchGuidanceViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action in ["approve_guidance", "pending_list"]:
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
