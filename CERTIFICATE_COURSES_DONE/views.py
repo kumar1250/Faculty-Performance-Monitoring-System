@@ -21,7 +21,7 @@ class CourseDone(ViewSet):
         if self.action == 'approvecourse':
             permission_classes = [IsHOD]
         elif self.action == "pending_list":
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]

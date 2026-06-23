@@ -8,7 +8,8 @@ from .serializers import FDPsOrganizedSerializer, CreateFDPsOrganizedSerializer
 
 from accounts.models import User
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
+
 
 import boto3
 from django.conf import settings
@@ -21,7 +22,7 @@ class FDPsOrganizedViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action == 'approve_fdp':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
             permission_classes = [IsHOD]
         else:

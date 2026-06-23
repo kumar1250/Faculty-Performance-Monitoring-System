@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import ProfessionalMembership
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from .serializers import ProfessionalMembershipSerializer, CreateProfessionalMembershipSerializer
 from accounts.models import User
 import boto3
@@ -15,9 +15,9 @@ class ProfessionalMembershipViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action == 'approve_membership':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]

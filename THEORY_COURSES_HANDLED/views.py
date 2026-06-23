@@ -6,7 +6,7 @@ from rest_framework import status
 from .models import StudentFeedbackPerformance
 from .serializers import StudentFeedbackPerformanceSerializer
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from accounts.models import User
 
 from .utils import send_student_feedback_email
@@ -82,7 +82,7 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action in ("approve_feedback", "pending_list"):
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]

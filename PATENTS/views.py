@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Patent
 from accounts.token_jwt import decode_token, get_token_from_request
-from accounts.permissions import IsAuthenticated, IsHOD
+from accounts.permissions import IsAuthenticated, IsHOD ,IsDean,IsPrincipal
 from .serializers import PatentSerializer, CreatePatentSerializer
 from accounts.models import User
 import boto3
@@ -14,9 +14,9 @@ from .utils import send_patent_status_email
 class PatentViewSet(ViewSet):
     def get_permissions(self):
         if self.action == 'approve_patent':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
