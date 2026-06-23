@@ -16,13 +16,24 @@ class User(models.Model):
         ('department_incharge', 'Department Incharge'),
         ('faculty', 'Faculty'),
     )
+    
+    DEPARTMENT_CHOICES = (
+    ('CSE', 'Computer Science and Engineering'),
+    ('CSE-ELITE', 'Computer Science and Engineering (ELITE)'),
+    ('ECE', 'Electronics and Communication Engineering'),
+    ('EEE', 'Electrical and Electronics Engineering'),
+    ('MECH', 'Mechanical Engineering'),
+    ('CIVIL', 'Civil Engineering'),
+)
 
     username = models.CharField(max_length=100)
     register_no = models.CharField(max_length=10, unique=True)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
     points=models.IntegerField(default=0,blank=True)
+    
     
     def save(self, *args, **kwargs):
         # Hash the password before saving

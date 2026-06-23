@@ -8,6 +8,7 @@ def create_token(user)->str:
         'user_id': user.id,
         'username': user.username,
         'role': user.role,
+        'department': user.department,
         'register_no': user.register_no,
         'exp': datetime.utcnow() + timedelta(hours=24),
         'iat': datetime.utcnow()
