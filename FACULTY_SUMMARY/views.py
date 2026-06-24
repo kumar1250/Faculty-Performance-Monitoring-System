@@ -179,7 +179,9 @@ def _build_faculty_detail(user_obj):
         else:
             modules.append(_module_summary_no_approval(label, qs))
 
-    total_points = sum(m['points'] for m in modules)
+    # total_points = sum(m['points'] for m in modules)
+    module_points = sum(m['points'] for m in modules)
+    total_points  = module_points + float(user_obj.points or 0)
 
     return {
         'user_id':      user_obj.id,
