@@ -1,6 +1,4 @@
 # Create your views here.
-from urllib import request
-
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,38 +7,40 @@ from .token_jwt import create_token, decode_token, get_token_from_request
 from django.contrib.auth.hashers import check_password
 from rest_framework import status
 from .models import User, BlacklistedToken, PasswordResetOTP
-from .serializers import (UserRegistrationSerializer, UserUpdateSerializer,ForgotPasswordSerializer, VerifyOTPSerializer,ResetPasswordSerializer)
+from .serializers import (UserRegistrationSerializer, UserUpdateSerializer, ForgotPasswordSerializer, VerifyOTPSerializer, ResetPasswordSerializer)
 from .utils import send_otp_email
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets
 from .models import Profile
 from .serializers import ProfileSerializer
 import boto3
 from django.conf import settings
 
 
+ROLE_POINTS = {
+    'principal': 10,
+    'dean': 9,
+    'hod': 8,
+    'committee_coordinator': 7,
+    'department_incharge': 6,
+    'faculty': 5,
+}
+
+
 class UserViewSet(ViewSet):
 
-    @action(detail=False, methods=['post'],url_path='register')
+    @action(detail=False, methods=['post'], url_path='register')
     def register(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            role_points = {
-            'principal': 10,
-            'dean': 9,
-            'hod': 8,
-            'committee_coordinator': 7,
-            'department_incharge': 6,
-            'faculty': 5,
-        }
-            if serializer.data['role']in role_points:
-                user = User.objects.get(id=serializer.data['id'])
-                user.points = role_points[serializer.data['role']]
+            user = serializer.save()
+            # Directly assign points based on role after saving
+            if user.role in ROLE_POINTS:
+                user.points = ROLE_POINTS[user.role]
                 user.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(UserRegistrationSerializer(user).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['post'],url_path='login')
+    @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):
         username = str(request.data.get('username'))
         password = request.data.get('password')
@@ -49,6 +49,7 @@ class UserViewSet(ViewSet):
                 user = User.objects.get(email=username)
             else:
                 user = User.objects.get(register_no=username)
+
             if check_password(password, user.password):
                 token = create_token(user)
                 return Response({'token': token}, status=status.HTTP_200_OK)
@@ -56,16 +57,19 @@ class UserViewSet(ViewSet):
                 return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-    @action(detail=False, methods=['get'],url_path='details', permission_classes=[IsAuthenticated])
+
+    @action(detail=False, methods=['get'], url_path='details', permission_classes=[IsAuthenticated])
     def user_details(self, request):
-        user = decode_token(get_token_from_request(request))
-        if user:
-            data = User.objects.get(id=user['user_id'])
-            serializer = UserRegistrationSerializer(data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+        user_data = decode_token(get_token_from_request(request))
+        if user_data:
+            try:
+                user = User.objects.get(id=user_data['user_id'])
+                serializer = UserRegistrationSerializer(user)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except User.DoesNotExist:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
-    
+
     @action(detail=False, methods=['post'], url_path='logout', permission_classes=[IsAuthenticated])
     def logout(self, request):
         token = get_token_from_request(request)
@@ -73,17 +77,17 @@ class UserViewSet(ViewSet):
             BlacklistedToken.objects.create(token=token)
             return Response({'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
         return Response({'error': 'Token not provided'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=False, methods=['get'], url_path='list', permission_classes=[IsAuthenticated])
     def user_list(self, request):
         users = User.objects.all()
         serializer = UserRegistrationSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     @action(detail=True, methods=['delete'], url_path='delete', permission_classes=[IsAuthenticated])
     def delete_user(self, request, pk=None):
-        user = decode_token(get_token_from_request(request))
-        if user and user['role'] in ['principal', 'dean', 'hod']:
+        user_data = decode_token(get_token_from_request(request))
+        if user_data and user_data['role'] in ['principal', 'dean', 'hod']:
             try:
                 user_to_delete = User.objects.get(id=pk)
                 user_to_delete.delete()
@@ -91,39 +95,39 @@ class UserViewSet(ViewSet):
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
-    
+
     @action(detail=True, methods=['patch'], url_path='updateuser', permission_classes=[IsAuthenticated])
     def update_user(self, request, pk=None):
-        user = decode_token(get_token_from_request(request))
-        
-        if user and user['role'] in ['principal', 'dean', 'hod']:
+        user_data = decode_token(get_token_from_request(request))
+
+        if user_data and user_data['role'] in ['principal', 'dean', 'hod']:
             try:
                 user_to_update = User.objects.get(id=pk)
-                user_to_update_role = user_to_update.role
-                serializer = UserUpdateSerializer(user_to_update, data=request.data,partial=True)
+                serializer = UserUpdateSerializer(user_to_update, data=request.data, partial=True)
+
                 if serializer.is_valid():
-                    serializer.save()
-                
-                    role_points = {
-                            'principal': 10,
-                            'dean': 9,
-                            'hod': 8,
-                            'committee_coordinator': 7,
-                            'department_incharge': 6,
-                            'faculty': 5,
-                            }
-                    if serializer.data['role'] in role_points:
-                        user_to_update.save()
-                        new_role = serializer.validated_data.get('role', user_to_update_role)
-                        user_to_update.points += role_points[new_role]
-                        user_to_update.points -= role_points[user_to_update_role]
-                        user_to_update.save()
-                    return Response({"username": user_to_update.username,"email": user_to_update.email,"register_no": user_to_update.register_no,"role": user_to_update.role}, status=status.HTTP_200_OK)
+                    updated_user = serializer.save()  # save the role change first
+
+                    # Always set points directly based on the current role
+                    # Never use delta math — each role has a fixed point value
+                    if updated_user.role in ROLE_POINTS:
+                        updated_user.points = ROLE_POINTS[updated_user.role]
+                        updated_user.save()
+
+                    return Response({
+                        "username": updated_user.username,
+                        "email": updated_user.email,
+                        "register_no": updated_user.register_no,
+                        "role": updated_user.role,
+                        "points": updated_user.points,
+                    }, status=status.HTTP_200_OK)
+
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
         return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
-    
 
     # ─────────────────────────────────────────────
     # STEP 1 — User enters email → OTP sent
@@ -133,36 +137,35 @@ class UserViewSet(ViewSet):
         serializer = ForgotPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
         email = serializer.validated_data['email']
-    
+
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # Don't reveal whether email exists or not
+            # Don't reveal whether the email exists or not
             return Response(
                 {'message': 'If this email exists, an OTP has been sent.'},
                 status=status.HTTP_200_OK
             )
-    
+
         # Invalidate all old unused OTPs for this user
         PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
-    
+
         # Create new OTP
         otp = PasswordResetOTP.generate_otp()
         PasswordResetOTP.objects.create(user=user, otp=otp)
-    
+
         try:
             send_otp_email(user.email, otp, user.username)
         except Exception as e:
             return Response(
-                {'error': f'Failed to send email. Please try again later {str(e)} .'},
+                {'error': f'Failed to send email. Please try again later: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
         return Response({'message': 'OTP sent to your email.'}, status=status.HTTP_200_OK)
-    
-    
+
     # ─────────────────────────────────────────────
     # STEP 2 — User enters OTP → gets reset_token
     # ─────────────────────────────────────────────
@@ -171,75 +174,71 @@ class UserViewSet(ViewSet):
         serializer = VerifyOTPSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
         email = serializer.validated_data['email']
         otp = serializer.validated_data['otp']
-    
+
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({'error': 'Invalid email.'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
         otp_record = PasswordResetOTP.objects.filter(
             user=user,
             otp=otp,
             is_used=False
         ).order_by('-created_at').first()
-    
+
         if not otp_record or not otp_record.is_valid():
             return Response({'error': 'Invalid or expired OTP.'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
         # Generate reset_token and attach to this OTP record
         reset_token = PasswordResetOTP.generate_reset_token()
         otp_record.reset_token = reset_token
         otp_record.save()
-    
-        # Return reset_token to frontend (frontend stores it temporarily)
+
         return Response({
             'message': 'OTP verified successfully.',
             'reset_token': reset_token
         }, status=status.HTTP_200_OK)
-    
-    
+
     # ─────────────────────────────────────────────
     # STEP 3 — User enters new password → done
-    # (no email or OTP needed again)
     # ─────────────────────────────────────────────
     @action(detail=False, methods=['post'], url_path='reset-password')
     def reset_password(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
         reset_token = serializer.validated_data['reset_token']
         new_password = serializer.validated_data['new_password']
-    
-        # Find OTP record by reset_token
+
         otp_record = PasswordResetOTP.objects.filter(
             reset_token=reset_token,
             is_used=False
         ).order_by('-created_at').first()
-    
+
         if not otp_record or not otp_record.is_valid():
             return Response(
                 {'error': 'Invalid or expired reset token.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+
         # Mark as used so this token cannot be reused
         otp_record.is_used = True
         otp_record.save()
-    
-        # Update the password
+
+        # Update the password (model.save() will hash it automatically)
         user = otp_record.user
-        user.password = new_password  # model.save() will hash it automatically
+        user.password = new_password
         user.save()
 
         return Response({'message': 'Password reset successfully.'}, status=status.HTTP_200_OK)
-    
-    
+
+
 class ProfileViewSet(viewsets.ViewSet):
-    
+
     def get_s3_client(self):
         return boto3.client(
             "s3",
@@ -256,10 +255,6 @@ class ProfileViewSet(viewsets.ViewSet):
 
         if profile.profile_image:
             s3 = self.get_s3_client()
-            # Must match Profile_image storage's `location = "profile_image"`
-            # in core/storage.py — that's the actual prefix S3Storage uses
-            # when uploading, so the presigned URL has to use the same key
-            # or it points at a file that was never written.
             key = f"profile_image/{profile.profile_image.name}"
             url = s3.generate_presigned_url(
                 "get_object",
@@ -287,9 +282,6 @@ class ProfileViewSet(viewsets.ViewSet):
         profile, _ = Profile.objects.get_or_create(user=user)
         return Response(self._serialize_with_image_url(profile))
 
-    # Lets the Portfolio page show the profile header (avatar, headline,
-    # department, experience, bio) when viewing someone else's portfolio in
-    # read-only mode, e.g. /profile/:registerNo on the frontend.
     @action(detail=False, methods=['get'], url_path='by-register/(?P<register_no>[^/.]+)', permission_classes=[IsAuthenticated])
     def get_profile_by_register_no(self, request, register_no=None):
         try:
@@ -311,9 +303,6 @@ class ProfileViewSet(viewsets.ViewSet):
         except User.DoesNotExist:
             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Use get_or_create instead of user.profile so a missing Profile row
-        # (e.g. never created for this user) doesn't raise
-        # Profile.RelatedObjectDoesNotExist and crash with a 500.
         profile, _ = Profile.objects.get_or_create(user=user)
 
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
