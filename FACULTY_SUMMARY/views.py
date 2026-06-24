@@ -89,9 +89,6 @@ def _module_summary_no_approval(label, queryset):
         'approved': queryset.count(),
         'pending':  0,
         'rejected': 0,
-        # Different apps store `points` as FloatField vs DecimalField, so Sum()
-        # can return either a float or a Decimal depending on the model.
-        # Normalize to float here so later sum()/sort() calls never mix types.
         'points':   float(pts),
     }
 
@@ -110,13 +107,10 @@ def _module_summary(label, queryset):
         'approved': approved_qs.count(),
         'pending':  pending_qs.count(),
         'rejected': rejected_qs.count(),
-        # Normalize to float — same reasoning as above.
         'points':   float(pts),
     }
 
 
-# Config used by both the lightweight summary and the full-detail builders.
-# (label, queryset_fn(user_obj), serializer_class, has_approval_status)
 def _module_config(user_obj):
     return [
         ("Book Publications",
@@ -158,7 +152,6 @@ def _module_config(user_obj):
         ("Sessions & Delivering Talks/Lectures",
          ChairingSession.objects.filter(user=user_obj), ChairingSessionSerializer, True),
 
-        # StudentCounselling uses 'faculty' FK instead of 'user'
         ("Student Counselling / Mentoring",
          StudentCounselling.objects.filter(faculty=user_obj), StudentCounsellingSerializer, False),
 
@@ -181,12 +174,18 @@ def _build_faculty_detail(user_obj):
 
     total_points = sum(m['points'] for m in modules)
 
+    # ── FIX: also write computed points back to User.points field ──────────
+    # This keeps the DB field in sync so any query that reads User.points
+    # directly (e.g. admin panel) reflects the real approved-activity total.
+    User.objects.filter(pk=user_obj.pk).update(points=int(total_points))
+
     return {
         'user_id':      user_obj.id,
         'register_no':  user_obj.register_no,
         'username':     user_obj.username,
         'email':        user_obj.email,
         'role':         user_obj.role,
+        'department':   user_obj.department,   # ← ADDED
         'modules':      modules,
         'total_points': total_points,
     }
@@ -213,10 +212,13 @@ def _build_faculty_full_detail(user_obj, request):
             'pending':  summary['pending'],
             'rejected': summary['rejected'],
             'points':   summary['points'],
-            'records':  records,   # <-- every field of every record in this module
+            'records':  records,
         })
 
     total_points = sum(m['points'] for m in modules)
+
+    # ── FIX: sync User.points field ────────────────────────────────────────
+    User.objects.filter(pk=user_obj.pk).update(points=int(total_points))
 
     return {
         'user_id':      user_obj.id,
@@ -224,6 +226,7 @@ def _build_faculty_full_detail(user_obj, request):
         'username':     user_obj.username,
         'email':        user_obj.email,
         'role':         user_obj.role,
+        'department':   user_obj.department,   # ← ADDED
         'modules':      modules,
         'total_points': total_points,
     }
@@ -267,12 +270,7 @@ def _get_s3_client():
 def _profile_image_urls_for_users(users):
     """
     Bulk-build {user_id: presigned_profile_image_url} for a list/queryset of
-    User objects in ONE query instead of one Profile lookup per row — search
-    results can return up to 25 rows and the leaderboard/all-faculty list can
-    return every faculty member, so this avoids an N+1 query (and N S3 calls
-    only happen for users who actually have a photo uploaded).
-    Mirrors the key format used in accounts/views.py ProfileViewSet so the
-    presigned URL always points at the same S3 prefix the file was uploaded to.
+    User objects in ONE query instead of one Profile lookup per row.
     """
     user_ids = [u.id for u in users]
     profiles = Profile.objects.filter(user_id__in=user_ids).exclude(profile_image='')
@@ -303,6 +301,7 @@ def _serialize_basic_user(u, image_url=None):
         'username':          u.username,
         'email':             u.email,
         'role':              u.role,
+        'department':        u.department,    # ← ADDED
         'profile_image_url': image_url,
     }
 
@@ -314,52 +313,18 @@ class FacultySummaryViewSet(ViewSet):
     Endpoints
     ---------
     GET  /summary/faculty-summary/my-summary/
-        -> Own module details (counts + points) for the logged-in user.
-
     GET  /summary/faculty-summary/by-user/?user_id=<id>
-        -> Module details (counts + points) for a specific user_id.
-
     GET  /summary/faculty-summary/by-register/?register_no=<register_no>
-        -> Module details (counts + points) looked up by register_no.
-
     GET  /summary/faculty-summary/by-register-full/?register_no=<register_no>
-        -> EVERY full record (all fields) for every module, for one faculty,
-           looked up by register_no. This is the "enter register number,
-           get everything" endpoint. Works for ANY role, not just faculty.
-
     GET  /summary/faculty-summary/search/?q=<text>
-        -> Search ALL users (any role — faculty, HOD, principal, dean, etc.)
-           by partial register_no or username match. Returns a short list
-           of {user_id, register_no, username, email, role} so the frontend
-           can build a live search/autocomplete box without pulling the
-           entire accounts list and filtering client-side.
-
     GET  /summary/faculty-summary/dashboard/?register_no=<register_no>&role=all
-        -> The all-in-one view: same full module breakdown as by-register-full,
-           PLUS that user's live rank among peers and points behind #1.
-           Defaults to ranking against ALL users; pass ?role=faculty to
-           narrow the peer group to one role.
-
     GET  /summary/faculty-summary/total-points/
-        -> Own total approved points only.
-
     GET  /summary/faculty-summary/total-points-by-user/?user_id=<id>
-        -> Total approved points for a specific user_id.
-
     GET  /summary/faculty-summary/all-faculty/?role=all
-        -> List of all users with their total points (unranked, register_no
-           order). Defaults to ALL roles now; pass ?role=faculty to narrow.
-
     GET  /summary/faculty-summary/leaderboard/?role=all
-        -> All users ranked by total points, HIGHEST FIRST, with rank numbers.
-           Dense ranking: ties share a rank, next score continues +1 with no
-           gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
-           Defaults to ALL roles; pass ?role=faculty (or hod/dean/etc.) to narrow.
     """
 
     def get_permissions(self):
-        # Tighten these to IsHOD / IsPrincipal / IsDean if you want to lock
-        # down who can see other people's data.
         return [IsAuthenticated()]
 
     # ------------------------------------------------------------------ #
@@ -431,15 +396,10 @@ class FacultySummaryViewSet(ViewSet):
         return Response(_build_faculty_detail(user_obj), status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # BY REGISTER NO — FULL DETAIL  (every module, every field)
+    # BY REGISTER NO — FULL DETAIL
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='by-register-full', methods=['get'])
     def by_register_full(self, request):
-        """
-        Enter a register_no, get back every module the faculty has any
-        record in, with every field of every record, plus per-module and
-        overall point totals.
-        """
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -466,14 +426,6 @@ class FacultySummaryViewSet(ViewSet):
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='search', methods=['get'])
     def search_users(self, request):
-        """
-        Live search across every user, regardless of role.
-        Matches partial register_no OR partial username (case-insensitive).
-
-        GET /summary/faculty-summary/search/?q=21A1
-        GET /summary/faculty-summary/search/?q=kumar
-        GET /summary/faculty-summary/search/?q=21A1&role=hod   (optional role narrowing)
-        """
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -492,7 +444,7 @@ class FacultySummaryViewSet(ViewSet):
         if role_filter:
             matches = matches.filter(role=role_filter)
 
-        matches = matches.order_by('register_no')[:25]   # cap results for a search box
+        matches = matches.order_by('register_no')[:25]
         matches = list(matches)
 
         image_urls = _profile_image_urls_for_users(matches)
@@ -519,6 +471,7 @@ class FacultySummaryViewSet(ViewSet):
                 'user_id':      user_obj.id,
                 'register_no':  user_obj.register_no,
                 'username':     user_obj.username,
+                'department':   user_obj.department,   # ← ADDED
                 'total_points': detail['total_points'],
             },
             status=status.HTTP_200_OK,
@@ -554,24 +507,17 @@ class FacultySummaryViewSet(ViewSet):
                 'user_id':      user_obj.id,
                 'register_no':  user_obj.register_no,
                 'username':     user_obj.username,
+                'department':   user_obj.department,   # ← ADDED
                 'total_points': detail['total_points'],
             },
             status=status.HTTP_200_OK,
         )
 
     # ------------------------------------------------------------------ #
-    # DASHBOARD  – full module detail + live rank, in one call
+    # DASHBOARD — full module detail + live rank
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='dashboard', methods=['get'])
     def dashboard(self, request):
-        """
-        The all-in-one screen: enter a register_no and get back
-          - every module, every record, every field (same as by-register-full)
-          - that faculty's current rank among their peers (dense rank: 1,2,2,3)
-          - how many points separate them from the #1 spot
-
-        GET /summary/faculty-summary/dashboard/?register_no=21A1234&role=faculty
-        """
         jwt_payload = _get_authenticated_user(request)
         if not jwt_payload:
             return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -585,11 +531,8 @@ class FacultySummaryViewSet(ViewSet):
         except User.DoesNotExist:
             return Response({'error': 'User not found for the given register_no.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Full per-module breakdown for this one user.
         full_detail = _build_faculty_full_detail(user_obj, request)
 
-        # Rank that user against their peer group. Defaults to ALL users now;
-        # pass ?role=<role> to narrow the comparison to one role.
         role_filter = request.query_params.get('role', 'all')
         peers = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
 
@@ -600,6 +543,7 @@ class FacultySummaryViewSet(ViewSet):
                 'user_id':      u.id,
                 'register_no':  u.register_no,
                 'username':     u.username,
+                'department':   u.department,   # ← ADDED
                 'total_points': detail['total_points'],
             })
         rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
@@ -617,7 +561,7 @@ class FacultySummaryViewSet(ViewSet):
         return Response(full_detail, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # ALL FACULTY  – list with points (unranked, register_no order)
+    # ALL FACULTY — list with points (unranked, register_no order)
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='all-faculty', methods=['get'])
     def all_faculty(self, request):
@@ -631,7 +575,6 @@ class FacultySummaryViewSet(ViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Defaults to ALL roles now; pass ?role=faculty (or hod/dean/etc.) to narrow.
         role_filter = request.query_params.get('role', 'all')
         users = User.objects.all() if role_filter == 'all' else User.objects.filter(role=role_filter)
         users = list(users.order_by('register_no'))
@@ -646,6 +589,8 @@ class FacultySummaryViewSet(ViewSet):
                 'register_no':       u.register_no,
                 'username':          u.username,
                 'email':             u.email,
+                'role':              u.role,
+                'department':        u.department,    # ← ADDED
                 'total_points':      detail['total_points'],
                 'profile_image_url': image_urls.get(u.id),
             })
@@ -653,13 +598,13 @@ class FacultySummaryViewSet(ViewSet):
         return Response({'count': len(results), 'faculty': results}, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------ #
-    # LEADERBOARD  – all faculty ranked by points, highest first
+    # LEADERBOARD — all faculty ranked by points, highest first
     # ------------------------------------------------------------------ #
     @action(detail=False, url_path='leaderboard', methods=['get'])
     def leaderboard(self, request):
         """
-        Ranks every faculty member by total approved points, descending.
-        ?role=faculty (default) — pass ?role=all to include every role.
+        Ranks every user by total approved points, descending.
+        ?role=all (default) — pass ?role=faculty to narrow to one role.
         Dense ranking: ties share a rank, next distinct score continues at
         rank+1 with no gaps (e.g. points 90, 80, 80, 70 -> ranks 1, 2, 2, 3).
         """
@@ -682,14 +627,12 @@ class FacultySummaryViewSet(ViewSet):
                 'username':          u.username,
                 'email':             u.email,
                 'role':              u.role,
+                'department':        u.department,    # ← ADDED (KEY FIX)
                 'total_points':      detail['total_points'],
                 'profile_image_url': image_urls.get(u.id),
             })
 
-        # Highest points first; stable secondary sort by username for a
-        # deterministic order among exact ties.
         rows.sort(key=lambda r: (-r['total_points'], r['username'] or ''))
-
         ranked_rows = _assign_ranks(rows)
 
         return Response(
