@@ -60,7 +60,7 @@ class FDPsAttendedViewSet(ViewSet):
 
     def get_permissions(self):
         if self.action == 'approve_fdp':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
             permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
