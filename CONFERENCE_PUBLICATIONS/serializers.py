@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Publication
 from accounts.serializers import UserSerializer
+from accounts.models import User
 
 class PublicationSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -8,14 +9,11 @@ class PublicationSerializer(serializers.ModelSerializer):
     def validate_certificate_file(self, value):
         if value:
             allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
-
             extension = value.name.split('.')[-1].lower()
-
             if extension not in allowed_extensions:
                 raise serializers.ValidationError(
                     "Only image files 'jpg', 'jpeg', 'png', 'gif', 'webp' are allowed."
                 )
-
         return value
 
     class Meta:
@@ -24,19 +22,17 @@ class PublicationSerializer(serializers.ModelSerializer):
 
 
 class CreatePublicationSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    # Change to PrimaryKeyRelatedField allowing write permissions on FormData initialization
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), write_only=True)
 
     def validate_certificate_file(self, value):
         if value:
             allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
-
             extension = value.name.split('.')[-1].lower()
-
             if extension not in allowed_extensions:
                 raise serializers.ValidationError(
                     "Only image files 'jpg', 'jpeg', 'png', 'gif', 'webp' are allowed."
                 )
-
         return value
 
     class Meta:
@@ -52,3 +48,9 @@ class CreatePublicationSerializer(serializers.ModelSerializer):
             'publication_date',
             'certificate_file'
         ]
+
+    def to_representation(self, instance):
+        # Keeps representation beautiful and structured as UserSerializer dictionary on successful responses
+        response = super().to_representation(instance)
+        response['user'] = UserSerializer(instance.user).data
+        return response
