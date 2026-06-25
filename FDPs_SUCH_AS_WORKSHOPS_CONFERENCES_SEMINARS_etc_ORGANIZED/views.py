@@ -24,7 +24,7 @@ class FDPsOrganizedViewSet(ViewSet):
         if self.action == 'approve_fdp':
             permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == 'pending_list':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
