@@ -19,7 +19,7 @@ class CourseDone(ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     def get_permissions(self):
         if self.action == 'approvecourse':
-            permission_classes = [IsHOD]
+            permission_classes = [IsHOD | IsDean | IsPrincipal]
         elif self.action == "pending_list":
             permission_classes = [IsHOD | IsDean | IsPrincipal]
         else:
