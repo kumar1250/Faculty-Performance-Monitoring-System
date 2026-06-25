@@ -11,6 +11,7 @@ from accounts.token_jwt import decode_token, get_token_from_request
 from accounts.permissions import IsAuthenticated, IsHOD, IsPrincipal, IsDean
 import boto3
 from django.conf import settings
+from django.db.models import Q
 
 # ── per-app model + serializer imports ───────────────────────────────────────
 from BOOK_PUBLICATIONS.models import BookPublication
@@ -470,8 +471,11 @@ class FacultySummaryViewSet(ViewSet):
     @action(detail=False, url_path='search', methods=['get'])
     def search_users(self, request):
         """
-        Live search across every user, regardless of role.
+        Live search across users.
         Matches partial register_no OR partial username (case-insensitive).
+
+        - HOD: results scoped to their own department only.
+        - Principal / Dean: can search across all departments.
 
         GET /summary/faculty-summary/search/?q=21A1
         GET /summary/faculty-summary/search/?q=kumar
@@ -485,11 +489,20 @@ class FacultySummaryViewSet(ViewSet):
         if not query:
             return Response({'error': 'q query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from django.db.models import Q
 
         matches = User.objects.filter(
             Q(register_no__icontains=query) | Q(username__icontains=query)
         )
+
+        # HOD can only search within their own department.
+        # Principal and Dean can search across all departments.
+        requester_role = jwt_payload.get('role')
+        if requester_role == 'hod':
+            try:
+                requester = User.objects.get(id=jwt_payload['user_id'])
+            except User.DoesNotExist:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            matches = matches.filter(department=requester.department)
 
         role_filter = request.query_params.get('role')
         if role_filter:
