@@ -108,6 +108,18 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # If the logged-in user is HOD and a target user PK is supplied in
+        # the payload, assign the record to that user instead of the HOD.
+        target_user_id = request.data.get("user")
+        if target_user_id and hasattr(user, 'role') and user.role == 'hod':
+            try:
+                user = User.objects.get(pk=target_user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"error": "Target user not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
         serializer = StudentFeedbackPerformanceSerializer(
             data=request.data,
             context={"request": request},
@@ -195,7 +207,13 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if feedback.user.register_no != token_data["register_no"]:
+        # Allow HOD to edit any record; others can only edit their own
+        try:
+            requesting_user = User.objects.get(register_no=token_data["register_no"])
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if requesting_user.role != 'hod' and feedback.user.register_no != token_data["register_no"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -284,7 +302,13 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if feedback.user.register_no != token_data["register_no"]:
+        # Allow HOD to delete any record; others can only delete their own
+        try:
+            requesting_user = User.objects.get(register_no=token_data["register_no"])
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if requesting_user.role != 'hod' and feedback.user.register_no != token_data["register_no"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
