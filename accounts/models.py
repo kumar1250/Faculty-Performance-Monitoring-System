@@ -24,6 +24,7 @@ class User(models.Model):
     ('EEE', 'Electrical and Electronics Engineering'),
     ('MECH', 'Mechanical Engineering'),
     ('CIVIL', 'Civil Engineering'),
+    ('ALL', 'All Departments'),
 )
 
     username = models.CharField(max_length=100)
