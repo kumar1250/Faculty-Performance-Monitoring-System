@@ -95,30 +95,25 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
         try:
             token_data = decode_token(get_token_from_request(request))
         except Exception:
-            return Response(
-                {"error": "User not logged in"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return Response({"error": "User not logged in"}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            user = User.objects.get(register_no=token_data["register_no"])
+            requesting_user = User.objects.get(register_no=token_data["register_no"])
         except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # If the logged-in user is HOD and a target user PK is supplied in
-        # the payload, assign the record to that user instead of the HOD.
+        # HOD/Dean/Principal can pass a target user PK → assign record to that user
         target_user_id = request.data.get("user")
-        if target_user_id and hasattr(user, 'role') and user.role == 'hod':
+        PRIVILEGED_ROLES = ('hod', 'dean', 'principal', 'department_incharge')
+
+        if target_user_id and requesting_user.role in PRIVILEGED_ROLES:
             try:
-                user = User.objects.get(pk=target_user_id)
+                target_user = User.objects.get(pk=target_user_id)
             except User.DoesNotExist:
-                return Response(
-                    {"error": "Target user not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+                return Response({"error": "Target user not found"}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Faculty creates for themselves
+            target_user = requesting_user
 
         serializer = StudentFeedbackPerformanceSerializer(
             data=request.data,
@@ -130,14 +125,15 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
         cycle_1     = serializer.validated_data.get("cycle_1_feedback")
         cycle_2     = serializer.validated_data.get("cycle_2_feedback")
         exam_result = serializer.validated_data.get("exam_result")
+        points      = compute_points(cycle_1, cycle_2, exam_result)
 
-        points = compute_points(cycle_1, cycle_2, exam_result)
+        # Save record assigned to the resolved target user
+        serializer.save(user=target_user, points=points)
 
-        serializer.save(user=user, points=points)
         try:
             send_student_feedback_email(
-                email=user.email,
-                username=user.username,
+                email=target_user.email,
+                username=target_user.username,
                 subject_name=serializer.validated_data.get("subject_name"),
                 academic_year=serializer.validated_data.get("academic_year"),
                 cycle_1_feedback=cycle_1,
@@ -146,12 +142,10 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 points=points,
                 message=serializer.validated_data.get("message"),
             )
-
         except Exception as e:
-            # You can log this instead of breaking API response
             print(f"Email sending failed: {e}")
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
     # ------------------------------------------------------------------ #
     # LIST ALL  GET /student-feedback/list/
     # ------------------------------------------------------------------ #
