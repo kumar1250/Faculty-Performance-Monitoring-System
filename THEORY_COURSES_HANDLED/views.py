@@ -128,7 +128,7 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
         points      = compute_points(cycle_1, cycle_2, exam_result)
 
         # Save record assigned to the resolved target user
-        serializer.save(user=target_user, points=points)
+        serializer.save(user=target_user, created_by=requesting_user, points=points)
 
         try:
             send_student_feedback_email(
@@ -152,6 +152,29 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
     @action(detail=False, url_path="list", methods=["get"])
     def feedback_list(self, request):
         feedbacks = StudentFeedbackPerformance.objects.all()
+        serializer = StudentFeedbackPerformanceSerializer(
+            feedbacks, many=True, context={"request": request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # ------------------------------------------------------------------ #
+    # MY UPLOADS  GET /student-feedback/my-uploads/
+    # Records the logged-in HOD personally entered, across every faculty
+    # member — used to scope edit/delete to entries they actually own.
+    # ------------------------------------------------------------------ #
+    @action(detail=False, url_path="my-uploads", methods=["get"])
+    def my_uploads(self, request):
+        try:
+            token_data = decode_token(get_token_from_request(request))
+        except Exception:
+            return Response({"error": "User not logged in"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            requesting_user = User.objects.get(register_no=token_data["register_no"])
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        feedbacks = StudentFeedbackPerformance.objects.filter(created_by=requesting_user)
         serializer = StudentFeedbackPerformanceSerializer(
             feedbacks, many=True, context={"request": request}
         )
@@ -201,19 +224,23 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Allow HOD to edit any record; others can only edit their own
+        # Permission check happens below once we know who created the record
         try:
             requesting_user = User.objects.get(register_no=token_data["register_no"])
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if requesting_user.role != 'hod' and feedback.user.register_no != token_data["register_no"]:
+        # Self-entry: faculty editing their own record is always allowed.
+        # Otherwise, only the person who actually created this entry
+        # (e.g. the HOD who logged it) can edit it — not every HOD.
+        is_owner   = feedback.user and feedback.user.register_no == token_data["register_no"]
+        is_creator = feedback.created_by_id == requesting_user.id
+
+        if not (is_owner or is_creator):
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        # ---- Collect fields -------------------------------------------
         academic_year    = request.data.get("academic_year")
         subject_name     = request.data.get("subject_name")
         cycle_1_feedback = request.data.get("cycle_1_feedback")
@@ -296,13 +323,19 @@ class StudentFeedbackPerformanceViewSet(ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Allow HOD to delete any record; others can only delete their own
+        # Permission check happens below once we know who created the record
         try:
             requesting_user = User.objects.get(register_no=token_data["register_no"])
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if requesting_user.role != 'hod' and feedback.user.register_no != token_data["register_no"]:
+        # Self-entry: faculty deleting their own record is always allowed.
+        # Otherwise, only the person who actually created this entry
+        # (e.g. the HOD who logged it) can delete it — not every HOD.
+        is_owner   = feedback.user and feedback.user.register_no == token_data["register_no"]
+        is_creator = feedback.created_by_id == requesting_user.id
+
+        if not (is_owner or is_creator):
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN,

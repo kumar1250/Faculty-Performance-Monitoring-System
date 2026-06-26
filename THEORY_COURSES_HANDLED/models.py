@@ -25,6 +25,17 @@ class StudentFeedbackPerformance(models.Model):
         null=True
     )
 
+    # Who actually entered/uploaded this record (HOD, faculty themselves, etc.)
+    # Used to scope edit/delete permissions — a HOD can only modify entries
+    # they personally created, not every entry on a faculty's profile.
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='created_feedback_entries',
+        blank=True,
+        null=True
+    )
+
     academic_year = models.CharField(
         max_length=20
     )
